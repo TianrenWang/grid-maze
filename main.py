@@ -24,7 +24,7 @@ if __name__ == "__main__":
         with open(f"maze/{id}.pkl", "wb") as file:
             pickle.dump(maze, file)
 
-    config = (
+    agentConfig = (
         PPOConfig()
         .environment(GridMazeEnv)
         .api_stack(
@@ -41,6 +41,11 @@ if __name__ == "__main__":
             }
         )
     )
-    config.env_config = {"maze": maze, "goal": [centerPosition] * 2}
-    ppo_w_custom_env = config.build_algo()
-    ppo_w_custom_env.train()
+
+    agentConfig.env_config = {"maze": maze, "goal": [centerPosition] * 2}
+    agent = agentConfig.build_algo()
+    checkpointPath = f"checkpoints/{id}/"
+    if os.path.exists(checkpointPath):
+        agent.restore(checkpointPath)
+    agent.train()
+    checkpoint_path = agent.save(checkpointPath)

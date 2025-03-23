@@ -1,6 +1,8 @@
 import pickle
 import os
+import torch
 
+from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
 from maze import generate_maze, print_maze
 from environment import GridMazeEnv
@@ -45,6 +47,7 @@ if __name__ == "__main__":
                 },
             }
         )
+        .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
             evaluation_interval=1,
             evaluation_num_env_runners=8,
@@ -63,7 +66,10 @@ if __name__ == "__main__":
     checkpointPath = f"checkpoints/{id}/"
     # if os.path.exists(checkpointPath):
     #     agent.restore(checkpointPath)
+
+    print(datetime.now())
     for i in range(10):
         result = agent.train()
         print(result["evaluation"]["env_runners"]["episode_reward_mean"])
+        print(datetime.now())
     # checkpoint_path = agent.save(checkpointPath)

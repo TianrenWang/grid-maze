@@ -8,10 +8,16 @@ class GridMazeEnv(gym.Env):
         self._episode_len = 0
         self._mazeArray = config["maze"]
         self._goalLocation = config["goal"]
+        self._startLocation = config.get("start", None)
+        self._maxSteps = config["maxSteps"]
         mazeSize = len(self._mazeArray)
 
         self._map = None
-        self._agentLocation = None
+        self._agentLocation = (
+            np.array(self._startLocation, dtype=np.int32)
+            if self._startLocation
+            else None
+        )
         self.observation_space = gym.spaces.MultiBinary((mazeSize, mazeSize, 3))
         self.action_space = gym.spaces.Discrete(4)
         self._action_to_direction = {
@@ -33,14 +39,17 @@ class GridMazeEnv(gym.Env):
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation, self._goalLocation, 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
-        agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
-        while (
-            np.array_equal(agentLocation, self._goalLocation)
-            and not self._mazeArray[agentLocation[0]][agentLocation[1]]
-        ):
+        if not self._startLocation:
             agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
-        self._agentLocation = agentLocation
-        agentChannel[agentLocation[0], agentLocation[1], 0] = 1
+            while (
+                np.array_equal(agentLocation, self._goalLocation)
+                and not self._mazeArray[agentLocation[0]][agentLocation[1]]
+            ):
+                agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
+            self._agentLocation = agentLocation
+            agentChannel[agentLocation[0], agentLocation[1], 0] = 1
+        else:
+            agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
@@ -50,6 +59,7 @@ class GridMazeEnv(gym.Env):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
         mazeSize = len(self._mazeArray)
+        illegalAction = False
 
         if (
             newLoc[0] < mazeSize
@@ -59,9 +69,11 @@ class GridMazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
+        else:
+            illegalAction = True
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
-        truncated = False
-        reward = 1 if terminated else -0.1
         self._episode_len += 1
+        truncated = self._episode_len > self._maxSteps
+        reward = 100 if terminated else -1 if illegalAction else -0.1
         return self._map, reward, terminated, truncated, self._get_info()

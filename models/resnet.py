@@ -5,6 +5,9 @@ from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models import ModelCatalog
 
 
+torch.manual_seed(0)
+
+
 class ResBlock(nn.Module):
     def __init__(self, num_hidden):
         super().__init__()

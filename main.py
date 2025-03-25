@@ -49,27 +49,29 @@ if __name__ == "__main__":
         )
         .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
-            evaluation_interval=1,
+            evaluation_interval=10,
             evaluation_num_env_runners=8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=16,
+            evaluation_duration=256,
         )
     )
-
-    agentConfig.env_config = {
+    environmentConfig = {
         "maze": maze,
         "goal": [centerPosition] * 2,
-        # "start": [5, 1],
+        "start": [3, 1],
         "maxSteps": 1000,
     }
+    agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
     checkpointPath = f"checkpoints/{id}/"
     # if os.path.exists(checkpointPath):
     #     agent.restore(checkpointPath)
 
     print(datetime.now())
-    for i in range(10):
+    for i in range(100):
         result = agent.train()
-        print(result["evaluation"]["env_runners"]["episode_reward_mean"])
-        print(datetime.now())
+        if "evaluation" in result:
+            print(f"Iteration {i}")
+            print(result["evaluation"]["env_runners"]["episode_reward_mean"])
+            print(datetime.now())
     # checkpoint_path = agent.save(checkpointPath)

@@ -2,6 +2,8 @@ from typing import Optional
 import numpy as np
 import gymnasium as gym
 
+from maze import print_maze
+
 
 class GridMazeEnv(gym.Env):
     def __init__(self, config=None):
@@ -50,6 +52,7 @@ class GridMazeEnv(gym.Env):
             agentChannel[agentLocation[0], agentLocation[1], 0] = 1
         else:
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
+            self._agentLocation = np.array(self._startLocation, dtype=np.int32)
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
@@ -58,14 +61,9 @@ class GridMazeEnv(gym.Env):
     def step(self, action):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        mazeSize = len(self._mazeArray)
         illegalAction = False
 
-        if (
-            newLoc[0] < mazeSize
-            and newLoc[1] < mazeSize
-            and self._mazeArray[newLoc[0]][newLoc[1]]
-        ):
+        if self._mazeArray[newLoc[0]][newLoc[1]]:
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
@@ -75,5 +73,10 @@ class GridMazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
-        reward = 100 if terminated else -1 if illegalAction else -0.1
+        reward = 100 if terminated else -0.1 if illegalAction else -0.01
         return self._map, reward, terminated, truncated, self._get_info()
+
+    def render(self):
+        mazeClone = [[item for item in row] for row in self._mazeArray]
+        mazeClone[self._agentLocation[0]][self._agentLocation[1]] = 3
+        print_maze(mazeClone)

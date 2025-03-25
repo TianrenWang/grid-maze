@@ -54,6 +54,7 @@ class GridMazeEnv(gym.Env):
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
+        mazeChannel = np.where(mazeChannel > 1, 1, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         return self._map, self._get_info()

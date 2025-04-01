@@ -49,7 +49,13 @@ class RLlibResNet(TorchModelV2, nn.Module):
             nn.Flatten(),
             nn.Linear(self.mazeSize**2 * 4, num_outputs),
         )
-        self.value_branch = nn.Linear(num_outputs, 1)
+        self.value_branch = nn.Sequential(
+            nn.Conv2d(self.hiddenSize, 3, kernel_size=3, padding=1),
+            nn.BatchNorm2d(3),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(self.mazeSize**2 * 3, 1),
+        )
 
     def forward(self, input_dict, state, seq_lens):
         x = input_dict["obs"].permute(0, 3, 1, 2).to(torch.float32)
@@ -57,11 +63,15 @@ class RLlibResNet(TorchModelV2, nn.Module):
         for resBlock in self.backBone:
             x = resBlock(x)
         policy = self.policy_branch(x)
+        self._value_out = self.value_branch(x).squeeze(1)
 
         return policy, []
 
     def value_function(self):
-        return self.value_branch(self._last_output).squeeze(1)
+        assert self._value_out is not None, (
+            "forward() must be called before value_function()"
+        )
+        return self._value_out
 
 
 ModelCatalog.register_custom_model("resnet", RLlibResNet)

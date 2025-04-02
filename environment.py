@@ -23,10 +23,10 @@ class GridMazeEnv(gym.Env):
         self.observation_space = gym.spaces.MultiBinary((mazeSize, mazeSize, 3))
         self.action_space = gym.spaces.Discrete(4)
         self._action_to_direction = {
-            0: np.array([1, 0]),  # right
-            1: np.array([0, 1]),  # up
-            2: np.array([-1, 0]),  # left
-            3: np.array([0, -1]),  # down
+            0: np.array([1, 0]),
+            1: np.array([0, 1]),
+            2: np.array([-1, 0]),
+            3: np.array([0, -1]),
         }
 
     def _get_obs(self):
@@ -63,8 +63,11 @@ class GridMazeEnv(gym.Env):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
         illegalAction = False
-
-        if self._mazeArray[newLoc[0]][newLoc[1]]:
+        if (
+            0 <= newLoc[0] < len(self._mazeArray)
+            and 0 <= newLoc[1] < len(self._mazeArray)
+            and self._mazeArray[newLoc[0]][newLoc[1]]
+        ):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
@@ -74,7 +77,7 @@ class GridMazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
-        reward = 100 if terminated else -0.1 if illegalAction else -0.01
+        reward = 100 if terminated else -1
         return self._map, reward, terminated, truncated, self._get_info()
 
     def render(self):

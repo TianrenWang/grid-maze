@@ -1,9 +1,12 @@
 import pickle
 import os
 import torch
+import numpy as np
 
 from datetime import datetime
+from ray.rllib.algorithms import Algorithm
 from ray.rllib.algorithms.ppo import PPOConfig
+
 from maze import generate_maze, print_maze
 from environment import GridMazeEnv
 import models  # noqa: F401
@@ -42,10 +45,12 @@ if __name__ == "__main__":
                 "custom_model": "resnet",
                 "custom_model_config": {
                     "hiddenSize": 16,
-                    "numLayers": 3,
+                    "numLayers": 5,
                     "mazeSize": mazeSize,
                 },
-            }
+            },
+            lr=1e-6,
+            entropy_coeff=0.1,
         )
         .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
@@ -63,15 +68,36 @@ if __name__ == "__main__":
     }
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
-    checkpointPath = f"checkpoints/{id}/"
-    # if os.path.exists(checkpointPath):
-    #     agent.restore(checkpointPath)
+    checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{id}"
+    if os.path.exists(checkpointPath):
+        agent.restore(checkpointPath)
 
-    print(datetime.now())
-    for i in range(100):
+    def manualRun(agent: Algorithm):
+        env = GridMazeEnv(environmentConfig)
+        obs, _ = env.reset()
+        policy = agent.get_policy()
+        done = False
+        steps = 0
+
+        while not done and steps < 10:
+            _, _, info = policy.compute_actions([obs], full_fetch=True)
+            policyLogits = info["action_dist_inputs"][0]
+            print(
+                "Action logits:",
+                torch.nn.functional.softmax(torch.Tensor(policyLogits)),
+            )
+            action = np.argmax(policyLogits)
+            obs, reward, done, _, info = env.step(action)  # Step the environment
+            steps += 1
+
+    for i in range(1):
         result = agent.train()
         if "evaluation" in result:
-            print(f"Iteration {i}")
-            print(result["evaluation"]["env_runners"]["episode_reward_mean"])
-            print(datetime.now())
-    # checkpoint_path = agent.save(checkpointPath)
+            print(
+                f"Iteration {i}:",
+                np.rint(result["evaluation"]["env_runners"]["episode_reward_mean"]),
+                " - ",
+                datetime.now(),
+            )
+            # manualRun(agent)
+    agent.save(checkpointPath)

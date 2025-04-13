@@ -43,7 +43,7 @@ if __name__ == "__main__":
         )
         .training(
             model={
-                "custom_model": "resnet",
+                "custom_model": "simple_maze_net",
                 "custom_model_config": {
                     "hiddenSize": 16,
                     "numLayers": 5,

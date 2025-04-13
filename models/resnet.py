@@ -25,7 +25,28 @@ class ResBlock(nn.Module):
         return x
 
 
-class RLlibResNet(TorchModelV2, nn.Module):
+class ResNet(nn.Module):
+    def __init__(self, layers, hiddenSize):
+        super().__init__()
+        self.hiddenSize = hiddenSize
+        self.layers = layers
+        self.startBlock = nn.Sequential(
+            nn.Conv2d(3, self.hiddenSize, kernel_size=3, padding=1),
+            nn.BatchNorm2d(self.hiddenSize),
+            nn.ReLU(),
+        )
+        self.backBone = nn.ModuleList(
+            [ResBlock(self.hiddenSize) for i in range(layers)]
+        )
+
+    def forward(self, x):
+        x = self.startBlock(x)
+        for resBlock in self.backBone:
+            x = resBlock(x)
+        return x
+
+
+class SimpleMazeNet(TorchModelV2, nn.Module):
     def __init__(
         self, obs_space, action_space, num_outputs, model_config, name, **kwargs
     ):
@@ -36,12 +57,7 @@ class RLlibResNet(TorchModelV2, nn.Module):
         self.hiddenSize = kwargs.get("hiddenSize", 16)
         self.numLayers = kwargs.get("numLayers", 4)
         self.mazeSize = kwargs.get("mazeSize", 13)
-        self.startBlock = nn.Sequential(
-            nn.Conv2d(3, self.hiddenSize, kernel_size=3, padding=1),
-            nn.BatchNorm2d(self.hiddenSize),
-            nn.ReLU(),
-        )
-        self.backBone = nn.ModuleList([ResBlock(self.hiddenSize) for i in range(4)])
+        self.resnet = ResNet(self.numLayers, self.hiddenSize)
         self.policy_branch = nn.Sequential(
             nn.Conv2d(self.hiddenSize, 4, kernel_size=3, padding=1),
             nn.BatchNorm2d(4),
@@ -59,9 +75,7 @@ class RLlibResNet(TorchModelV2, nn.Module):
 
     def forward(self, input_dict, state, seq_lens):
         x = input_dict["obs"].permute(0, 3, 1, 2).to(torch.float32)
-        x = self.startBlock(x)
-        for resBlock in self.backBone:
-            x = resBlock(x)
+        x = self.resnet(x)
         policy = self.policy_branch(x)
         self._value_out = self.value_branch(x).squeeze(1)
 
@@ -74,4 +88,4 @@ class RLlibResNet(TorchModelV2, nn.Module):
         return self._value_out
 
 
-ModelCatalog.register_custom_model("resnet", RLlibResNet)
+ModelCatalog.register_custom_model("simple_maze_net", SimpleMazeNet)

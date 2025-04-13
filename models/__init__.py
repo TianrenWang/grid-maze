@@ -1,1 +1,1 @@
-from .resnet import RLlibResNet
+from .resnet import SimpleMazeNet

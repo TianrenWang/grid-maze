@@ -19,6 +19,7 @@ if __name__ == "__main__":
     goalLocation = (centerPosition, centerPosition)
     id = f"{mazeSize}by{mazeSize}"
     mazesPath = "mazes"
+    debug = False
 
     if not os.path.exists(mazesPath):
         os.makedirs(mazesPath)
@@ -50,7 +51,7 @@ if __name__ == "__main__":
                 },
             },
             lr=1e-6,
-            entropy_coeff=0.1,
+            entropy_coeff=0.01,
         )
         .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
@@ -90,14 +91,15 @@ if __name__ == "__main__":
             obs, reward, done, _, info = env.step(action)  # Step the environment
             steps += 1
 
-    for i in range(1):
+    for i in range(2000):
         result = agent.train()
         if "evaluation" in result:
             print(
-                f"Iteration {i}:",
+                f"Iteration {i + 1}:",
                 np.rint(result["evaluation"]["env_runners"]["episode_reward_mean"]),
                 " - ",
                 datetime.now(),
             )
-            # manualRun(agent)
-    agent.save(checkpointPath)
+            if debug:
+                manualRun(agent)
+            agent.save(checkpointPath)

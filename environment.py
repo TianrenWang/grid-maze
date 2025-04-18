@@ -12,7 +12,14 @@ class GridMazeEnv(gym.Env):
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
+        self._places = dict()
         mazeSize = len(self._mazeArray)
+        counter = 0
+        for i in range(mazeSize):
+            for j in range(mazeSize):
+                if self._mazeArray[i][j] == 1:
+                    self._places[(i, j)] = counter
+                    counter += 1
 
         self._map = None
         self._agentLocation = (
@@ -20,7 +27,12 @@ class GridMazeEnv(gym.Env):
             if self._startLocation
             else None
         )
-        self.observation_space = gym.spaces.MultiBinary((mazeSize, mazeSize, 3))
+        self.observation_space = gym.spaces.Dict(
+            {
+                "map": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
+                "place": gym.spaces.MultiBinary(counter),
+            }
+        )
         self.action_space = gym.spaces.Discrete(4)
         self._action_to_direction = {
             0: np.array([1, 0]),
@@ -34,6 +46,14 @@ class GridMazeEnv(gym.Env):
 
     def _get_info(self):
         return {"location": self._agentLocation}
+
+    def _getObs(self):
+        placeOneHot = np.zeros(len(self._places), dtype=np.int32)
+        placeOneHot[self._places[tuple(self._agentLocation.tolist())]] = 1
+        return {
+            "map": self._map,
+            "place": placeOneHot,
+        }
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -57,7 +77,7 @@ class GridMazeEnv(gym.Env):
         mazeChannel = np.where(mazeChannel > 1, 1, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
-        return self._map, self._get_info()
+        return self._getObs(), self._get_info()
 
     def step(self, action):
         direction = self._action_to_direction[action]
@@ -77,8 +97,8 @@ class GridMazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
-        reward = 100 if terminated else -1
-        return self._map, reward, terminated, truncated, self._get_info()
+        reward = 500 if terminated else -3 if illegalAction else -1
+        return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
         mazeClone = [[item for item in row] for row in self._mazeArray]

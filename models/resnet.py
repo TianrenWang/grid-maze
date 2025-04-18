@@ -1,11 +1,5 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
-from ray.rllib.models import ModelCatalog
-
-
-torch.manual_seed(0)
 
 
 class ResBlock(nn.Module):
@@ -44,48 +38,3 @@ class ResNet(nn.Module):
         for resBlock in self.backBone:
             x = resBlock(x)
         return x
-
-
-class SimpleMazeNet(TorchModelV2, nn.Module):
-    def __init__(
-        self, obs_space, action_space, num_outputs, model_config, name, **kwargs
-    ):
-        TorchModelV2.__init__(
-            self, obs_space, action_space, num_outputs, model_config, name
-        )
-        nn.Module.__init__(self)
-        self.hiddenSize = kwargs.get("hiddenSize", 16)
-        self.numLayers = kwargs.get("numLayers", 4)
-        self.mazeSize = kwargs.get("mazeSize", 13)
-        self.resnet = ResNet(self.numLayers, self.hiddenSize)
-        self.policy_branch = nn.Sequential(
-            nn.Conv2d(self.hiddenSize, 4, kernel_size=3, padding=1),
-            nn.BatchNorm2d(4),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(self.mazeSize**2 * 4, num_outputs),
-        )
-        self.value_branch = nn.Sequential(
-            nn.Conv2d(self.hiddenSize, 3, kernel_size=3, padding=1),
-            nn.BatchNorm2d(3),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(self.mazeSize**2 * 3, 1),
-        )
-
-    def forward(self, input_dict, state, seq_lens):
-        x = input_dict["obs"].permute(0, 3, 1, 2).to(torch.float32)
-        x = self.resnet(x)
-        policy = self.policy_branch(x)
-        self._value_out = self.value_branch(x).squeeze(1)
-
-        return policy, []
-
-    def value_function(self):
-        assert self._value_out is not None, (
-            "forward() must be called before value_function()"
-        )
-        return self._value_out
-
-
-ModelCatalog.register_custom_model("simple_maze_net", SimpleMazeNet)

@@ -81,11 +81,15 @@ if __name__ == "__main__":
         steps = 0
 
         while not done and steps < 10:
-            _, _, info = policy.compute_actions([obs], full_fetch=True)
+            batched_obs = {
+                "map": np.expand_dims(obs["map"], axis=0),
+                "place": np.expand_dims(obs["place"], axis=0),
+            }
+            _, _, info = policy.compute_actions(batched_obs, full_fetch=True)
             policyLogits = info["action_dist_inputs"][0]
             print(
                 "Action logits:",
-                torch.nn.functional.softmax(torch.Tensor(policyLogits)),
+                torch.nn.functional.softmax(torch.Tensor(policyLogits), dim=0),
             )
             action = np.argmax(policyLogits)
             obs, reward, done, _, info = env.step(action)  # Step the environment

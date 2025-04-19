@@ -17,7 +17,7 @@ class GridMazeEnv(gym.Env):
         counter = 0
         for i in range(mazeSize):
             for j in range(mazeSize):
-                if self._mazeArray[i][j] == 1:
+                if self._mazeArray[i][j] > 0:
                     self._places[(i, j)] = counter
                     counter += 1
 
@@ -96,8 +96,8 @@ class GridMazeEnv(gym.Env):
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
-        truncated = self._episode_len > self._maxSteps
-        reward = 500 if terminated else -3 if illegalAction else -1
+        truncated = self._episode_len == self._maxSteps
+        reward = 500 if terminated else -0.3 if illegalAction else -0.1
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

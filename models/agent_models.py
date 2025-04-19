@@ -18,14 +18,18 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         self.hiddenSize = kwargs.get("hiddenSize", 16)
         self.numLayers = kwargs.get("numLayers", 4)
         self.mazeSize = kwargs.get("mazeSize", 13)
+        linearHiddenSize = self.hiddenSize * 8
         self.primaryConvModule = SimpleMazeConv(self.hiddenSize)
+        primaryConvModuleOutSize = (self.mazeSize // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(self.mazeSize**2 * self.hiddenSize * 2, 128),
+            nn.Linear(
+                primaryConvModuleOutSize**2 * self.hiddenSize * 2, linearHiddenSize
+            ),
             nn.ReLU(),
         )
-        self.policy_branch = nn.Linear(128, num_outputs)
-        self.value_branch = nn.Linear(128, 1)
+        self.policy_branch = nn.Linear(linearHiddenSize, num_outputs)
+        self.value_branch = nn.Linear(linearHiddenSize, 1)
 
     def forward(self, input_dict, state, seq_lens):
         mapInput = input_dict["obs"]["map"].permute(0, 3, 1, 2).to(torch.float32)

@@ -7,7 +7,11 @@ class SimpleMazeConv(nn.Module):
         self.convModule = nn.Sequential(
             nn.Conv2d(3, hiddenSize, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(hiddenSize, hiddenSize * 2, kernel_size=3, padding=1),
+            nn.Conv2d(hiddenSize, hiddenSize * 2, kernel_size=3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(
+                hiddenSize * 2, hiddenSize * 2, kernel_size=3, padding=1, stride=2
+            ),
             nn.ReLU(),
         )
 

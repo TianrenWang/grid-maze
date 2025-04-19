@@ -65,7 +65,7 @@ class GridMazeEnv(gym.Env):
             agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             while (
                 np.array_equal(agentLocation, self._goalLocation)
-                and not self._mazeArray[agentLocation[0]][agentLocation[1]]
+                or not self._mazeArray[agentLocation[0]][agentLocation[1]]
             ):
                 agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._agentLocation = agentLocation

@@ -89,7 +89,6 @@ class GridMazeEnv(gym.Env):
         initialLocation = self._agentLocation
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        illegalAction = False
         dithered = False
         if (
             0 <= newLoc[0] < len(self._mazeArray)
@@ -99,19 +98,15 @@ class GridMazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
-            dithered = np.array_equal(self._agentLocation, self._pastLocation)
-            self._map[self._pastLocation[0], self._pastLocation[1], 3] = 0
-            self._pastLocation = initialLocation
-            self._map[self._pastLocation[0], self._pastLocation[1], 3] = 1
-        else:
-            illegalAction = True
+        dithered = np.array_equal(self._agentLocation, self._pastLocation)
+        self._map[self._pastLocation[0], self._pastLocation[1], 3] = 0
+        self._pastLocation = initialLocation
+        self._map[self._pastLocation[0], self._pastLocation[1], 3] = 1
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len == self._maxSteps
-        reward = (
-            500 if terminated else -0.3 if illegalAction else -1 if dithered else -0.1
-        )
+        reward = 500 if terminated else -0.3 if dithered else -0.1
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

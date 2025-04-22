@@ -21,7 +21,7 @@ parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=2000)
 parser.add_argument("--evalInterval", type=int, default=100)
-parser.add_argument("--fixedStart", type=bool, default=False)
+parser.add_argument("--fixedStart", type=bool, default=True)
 args = parser.parse_args()
 
 

@@ -27,6 +27,7 @@ class GridMazeEnv(gym.Env):
             if self._startLocation
             else None
         )
+        self._pastLocation = self._agentLocation
         self.observation_space = gym.spaces.Dict(
             {
                 "map": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
@@ -73,6 +74,7 @@ class GridMazeEnv(gym.Env):
         else:
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
+        self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
         mazeChannel = np.where(mazeChannel > 1, 1, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
@@ -80,9 +82,10 @@ class GridMazeEnv(gym.Env):
         return self._getObs(), self._get_info()
 
     def step(self, action):
+        initialLocation = self._agentLocation
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        illegalAction = False
+        dithered = False
         if (
             0 <= newLoc[0] < len(self._mazeArray)
             and 0 <= newLoc[1] < len(self._mazeArray)
@@ -91,13 +94,13 @@ class GridMazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
-        else:
-            illegalAction = True
+        dithered = np.array_equal(self._agentLocation, self._pastLocation)
+        self._pastLocation = initialLocation
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len == self._maxSteps
-        reward = 500 if terminated else -0.3 if illegalAction else -0.1
+        reward = 500 if terminated else -0.3 if dithered else -0.1
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

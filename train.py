@@ -8,7 +8,7 @@ from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
 
 from maze import generate_maze, print_maze
-from environment import GridMazeEnv
+from environments import MazeEnv, FoggedMazeEnv
 import models  # noqa: F401
 
 parser = argparse.ArgumentParser()
@@ -22,6 +22,8 @@ parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=2000)
 parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=bool, default=True)
+parser.add_argument("--fogged", type=bool, default=False)
+parser.add_argument("--placeCells", type=bool, default=False)
 args = parser.parse_args()
 
 
@@ -31,6 +33,7 @@ if __name__ == "__main__":
     goalLocation = (mazeSize - 2, mazeSize - 2)
     mazeName = args.mazeName
     mazesPath = "mazes"
+    visionRange = 4
 
     if not os.path.exists(mazesPath):
         os.makedirs(mazesPath)
@@ -48,17 +51,19 @@ if __name__ == "__main__":
 
     agentConfig = (
         PPOConfig()
-        .environment(GridMazeEnv)
+        .environment(FoggedMazeEnv if args.fogged else MazeEnv)
         .api_stack(
             enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False
         )
         .training(
             model={
-                "custom_model": "simple_maze_net",
+                "custom_model": "place_maze_net"
+                if args.placeCells
+                else "simple_maze_net",
                 "custom_model_config": {
                     "hiddenSize": args.hiddenSize,
                     "numLayers": args.numLayers,
-                    "mazeSize": mazeSize,
+                    "visionRange": visionRange if args.fogged else mazeSize,
                 },
             },
             lr=args.lr,

@@ -4,7 +4,7 @@ from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models import ModelCatalog
 
 from .grid import PlaceProcessor
-from .simple_maze_conv import SimpleMazeConv
+from .simple_conv import SimpleConv
 
 
 class SimpleMazeNet(TorchModelV2, nn.Module):
@@ -17,10 +17,11 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
         self.hiddenSize = kwargs.get("hiddenSize", 16)
         self.numLayers = kwargs.get("numLayers", 4)
-        self.mazeSize = kwargs.get("mazeSize", 13)
+        self.visionRange = kwargs.get("visionRange", 13)
         linearHiddenSize = self.hiddenSize * 8
-        self.primaryConvModule = SimpleMazeConv(self.hiddenSize)
-        primaryConvModuleOutSize = (self.mazeSize // 2 + 1) // 2
+        visionInputSize = self.visionRange * 2 + 1
+        self.primaryConvModule = SimpleConv(self.hiddenSize)
+        primaryConvModuleOutSize = ((visionInputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
             nn.Linear(
@@ -32,7 +33,7 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         self.value_branch = nn.Linear(linearHiddenSize, 1)
 
     def forward(self, input_dict, state, seq_lens):
-        mapInput = input_dict["obs"]["map"].permute(0, 3, 1, 2).to(torch.float32)
+        mapInput = input_dict["obs"]["vision"].permute(0, 3, 1, 2).to(torch.float32)
         mapOutput = self.primaryConvModule(mapInput)
         mapOutput = self.prePredictionHead(mapOutput)
         policy = self.policy_branch(mapOutput)
@@ -73,4 +74,4 @@ class PlaceMazeNet(SimpleMazeNet):
 
 
 ModelCatalog.register_custom_model("simple_maze_net", SimpleMazeNet)
-ModelCatalog.register_custom_model("place_maze_net", SimpleMazeNet)
+ModelCatalog.register_custom_model("place_maze_net", PlaceMazeNet)

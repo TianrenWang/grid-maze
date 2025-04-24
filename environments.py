@@ -5,21 +5,14 @@ import gymnasium as gym
 from maze import print_maze
 
 
-class GridMazeEnv(gym.Env):
+class MazeEnv(gym.Env):
     def __init__(self, config=None):
         self._episode_len = 0
         self._mazeArray = config["maze"]
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
-        self._places = dict()
         mazeSize = len(self._mazeArray)
-        counter = 0
-        for i in range(mazeSize):
-            for j in range(mazeSize):
-                if self._mazeArray[i][j] > 0:
-                    self._places[(i, j)] = counter
-                    counter += 1
 
         self._map = None
         self._agentLocation = (
@@ -30,8 +23,7 @@ class GridMazeEnv(gym.Env):
         self._pastLocation = self._agentLocation
         self.observation_space = gym.spaces.Dict(
             {
-                "map": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
-                "place": gym.spaces.MultiBinary(counter),
+                "vision": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
             }
         )
         self.action_space = gym.spaces.Discrete(4)
@@ -49,12 +41,7 @@ class GridMazeEnv(gym.Env):
         return {"location": self._agentLocation}
 
     def _getObs(self):
-        placeOneHot = np.zeros(len(self._places), dtype=np.int32)
-        placeOneHot[self._places[tuple(self._agentLocation.tolist())]] = 1
-        return {
-            "map": self._map,
-            "place": placeOneHot,
-        }
+        return {"vision": self._map}
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -107,3 +94,67 @@ class GridMazeEnv(gym.Env):
         mazeClone = [[item for item in row] for row in self._mazeArray]
         mazeClone[self._agentLocation[0]][self._agentLocation[1]] = 3
         print_maze(mazeClone)
+
+
+class FoggedMazeEnv(MazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        self._visualRange = config.get("visualRange", 4)
+        visualObsSize = self._visualRange * 2 + 1
+        self._places = dict()
+        mazeSize = len(self._mazeArray)
+        counter = 0
+        for i in range(mazeSize):
+            for j in range(mazeSize):
+                if self._mazeArray[i][j] > 0:
+                    self._places[(i, j)] = counter
+                    counter += 1
+        self.observation_space = gym.spaces.Dict(
+            {
+                "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
+                "place": gym.spaces.MultiBinary(counter),
+            }
+        )
+
+    def _getObs(self):
+        placeOneHot = np.zeros(len(self._places), dtype=np.int32)
+        placeOneHot[self._places[tuple(self._agentLocation.tolist())]] = 1
+        paddedMap = np.pad(
+            self._map,
+            (
+                (self._visualRange, self._visualRange),
+                (self._visualRange, self._visualRange),
+                (0, 0),
+            ),
+            mode="constant",
+        )
+        _paddedAgentLoc = self._agentLocation + np.array((4, 4))
+        vision = paddedMap[
+            _paddedAgentLoc[0] - 4 : _paddedAgentLoc[0] + 5,
+            _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
+            :,
+        ]
+        mask = np.zeros((9, 9, 3), dtype=bool)
+        mask[4, :] = True
+        mask[:, 4] = True
+        vision[~mask] = 0
+        leftVision = vision[4, :4, 0].squeeze().flatten()
+        leftZeroIdx = np.where(leftVision == 0)[0]
+        rightVision = vision[4, 5:, 0].squeeze().flatten()
+        rightZeroIdx = np.where(rightVision == 0)[0]
+        upVision = vision[:4, 4, 0].squeeze().flatten()
+        upZeroIdx = np.where(upVision == 0)[0]
+        downVision = vision[5:, 4, 0].squeeze().flatten()
+        downZeroIdx = np.where(downVision == 0)[0]
+        if len(leftZeroIdx):
+            vision[4, : leftZeroIdx[-1], :] = 0
+        if len(rightZeroIdx):
+            vision[4, 5 + rightZeroIdx[0] :, :] = 0
+        if len(upZeroIdx):
+            vision[: upZeroIdx[-1], 4, :] = 0
+        if len(downZeroIdx):
+            vision[5 + downZeroIdx[0] :, 4, :] = 0
+        return {
+            "vision": vision,
+            "place": placeOneHot,
+        }

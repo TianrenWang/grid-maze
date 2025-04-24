@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-class SimpleMazeConv(nn.Module):
+class SimpleConv(nn.Module):
     def __init__(self, hiddenSize: int):
         super().__init__()
         self.convModule = nn.Sequential(

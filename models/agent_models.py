@@ -17,11 +17,10 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
         self.hiddenSize = kwargs.get("hiddenSize", 16)
         self.numLayers = kwargs.get("numLayers", 4)
-        self.visionRange = kwargs.get("visionRange", 13)
+        self.inputSize = kwargs.get("inputSize", 13)
         linearHiddenSize = self.hiddenSize * 8
-        visionInputSize = self.visionRange * 2 + 1
         self.primaryConvModule = SimpleConv(self.hiddenSize)
-        primaryConvModuleOutSize = ((visionInputSize + 1) // 2 + 1) // 2
+        primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
             nn.Linear(

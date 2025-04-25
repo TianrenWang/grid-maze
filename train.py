@@ -63,7 +63,7 @@ if __name__ == "__main__":
                 "custom_model_config": {
                     "hiddenSize": args.hiddenSize,
                     "numLayers": args.numLayers,
-                    "visionRange": visionRange if args.fogged else mazeSize,
+                    "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
                 },
             },
             lr=args.lr,

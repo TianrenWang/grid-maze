@@ -53,8 +53,8 @@ class MemoryMazeNet(SimpleMazeNet):
         SimpleMazeNet.__init__(
             self, obs_space, action_space, num_outputs, model_config, name, **kwargs
         )
-        self.trajectoryMemory = nn.LSTM(
-            self.linearHiddenSize, self.linearHiddenSize, 1, batch_first=True
+        self.trajectoryMemory = nn.GRU(
+            self.linearHiddenSize, self.linearHiddenSize, batch_first=True
         )
 
     def forward(self, input_dict, state, seq_lens):
@@ -65,7 +65,7 @@ class MemoryMazeNet(SimpleMazeNet):
         memoryFeatures = self.primaryConvModule(memory)
         memoryFeatures = self.prePredictionHead(memoryFeatures)
         memoryFeatures = memoryFeatures.reshape(*memoryShape[:2], self.linearHiddenSize)
-        _, (currentStateFeatures, __) = self.trajectoryMemory(memoryFeatures)
+        _, currentStateFeatures = self.trajectoryMemory(memoryFeatures)
         currentStateFeatures = currentStateFeatures.squeeze(0)
         policy = self.policy_branch(currentStateFeatures)
         self._value_out = self.value_branch(currentStateFeatures).squeeze(1)

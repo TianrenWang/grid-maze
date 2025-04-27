@@ -24,7 +24,7 @@ parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=bool, default=True)
 parser.add_argument("--fogged", type=bool, default=False)
 parser.add_argument("--placeCells", type=bool, default=False)
-parser.add_argument("--useMemory", type=bool, default=False)
+parser.add_argument("--memoryLen", type=int, default=5)
 args = parser.parse_args()
 
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     if args.placeCells:
         model = "place_maze_net"
-    elif args.useMemory and args.fogged:
+    elif args.memoryLen > 1 and args.fogged:
         model = "memory_maze_net"
     else:
         model = "simple_maze_net"
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         "goal": list(goalLocation),
         "start": [1, 1] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
-        "useMemory": args.useMemory,
+        "memoryLen": args.memoryLen,
     }
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()

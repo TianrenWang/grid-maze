@@ -100,7 +100,7 @@ class FoggedMazeEnv(MazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
         self._visualRange = config.get("visualRange", 4)
-        self._useMemory = config.get("useMemory", False)
+        self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
         self._memory = None
         self._places = dict()
@@ -115,9 +115,9 @@ class FoggedMazeEnv(MazeEnv):
             "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
             "place": gym.spaces.MultiBinary(counter),
         }
-        if self._useMemory:
+        if self._memoryLen > 1:
             obsDict["memory"] = gym.spaces.MultiBinary(
-                (10, visualObsSize, visualObsSize, 3)
+                (self._memoryLen, visualObsSize, visualObsSize, 3)
             )
         self.observation_space = gym.spaces.Dict(obsDict)
 
@@ -164,9 +164,9 @@ class FoggedMazeEnv(MazeEnv):
             "vision": vision,
             "place": placeOneHot,
         }
-        if self._useMemory:
+        if self._memoryLen > 1:
             if not self._memory:
-                self._memory = [vision] * 10
+                self._memory = [vision] * self._memoryLen
             else:
                 self._memory.append(vision)
                 self._memory.pop(0)

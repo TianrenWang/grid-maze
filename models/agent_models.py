@@ -18,18 +18,18 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         self.hiddenSize = kwargs.get("hiddenSize", 16)
         self.numLayers = kwargs.get("numLayers", 4)
         self.inputSize = kwargs.get("inputSize", 13)
-        linearHiddenSize = self.hiddenSize * 8
+        self.linearHiddenSize = self.hiddenSize * 8
         self.primaryConvModule = SimpleConv(self.hiddenSize)
         primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
             nn.Linear(
-                primaryConvModuleOutSize**2 * self.hiddenSize * 2, linearHiddenSize
+                primaryConvModuleOutSize**2 * self.hiddenSize * 2, self.linearHiddenSize
             ),
             nn.ReLU(),
         )
-        self.policy_branch = nn.Linear(linearHiddenSize, num_outputs)
-        self.value_branch = nn.Linear(linearHiddenSize, 1)
+        self.policy_branch = nn.Linear(self.linearHiddenSize, num_outputs)
+        self.value_branch = nn.Linear(self.linearHiddenSize, 1)
 
     def forward(self, input_dict, state, seq_lens):
         mapInput = input_dict["obs"]["vision"].permute(0, 3, 1, 2).to(torch.float32)
@@ -37,6 +37,38 @@ class SimpleMazeNet(TorchModelV2, nn.Module):
         mapOutput = self.prePredictionHead(mapOutput)
         policy = self.policy_branch(mapOutput)
         self._value_out = self.value_branch(mapOutput).squeeze(1)
+        return policy, []
+
+    def value_function(self):
+        assert self._value_out is not None, (
+            "forward() must be called before value_function()"
+        )
+        return self._value_out
+
+
+class MemoryMazeNet(SimpleMazeNet):
+    def __init__(
+        self, obs_space, action_space, num_outputs, model_config, name, **kwargs
+    ):
+        SimpleMazeNet.__init__(
+            self, obs_space, action_space, num_outputs, model_config, name, **kwargs
+        )
+        self.trajectoryMemory = nn.GRU(
+            self.linearHiddenSize, self.linearHiddenSize, batch_first=True
+        )
+
+    def forward(self, input_dict, state, seq_lens):
+        memory = input_dict["obs"]["memory"]
+        memoryShape = memory.shape
+        memory = memory.reshape(-1, *memoryShape[2:])
+        memory = memory.permute(0, 3, 1, 2).to(torch.float32)
+        memoryFeatures = self.primaryConvModule(memory)
+        memoryFeatures = self.prePredictionHead(memoryFeatures)
+        memoryFeatures = memoryFeatures.reshape(*memoryShape[:2], self.linearHiddenSize)
+        _, currentStateFeatures = self.trajectoryMemory(memoryFeatures)
+        currentStateFeatures = currentStateFeatures.squeeze(0)
+        policy = self.policy_branch(currentStateFeatures)
+        self._value_out = self.value_branch(currentStateFeatures).squeeze(1)
         return policy, []
 
     def value_function(self):
@@ -74,3 +106,4 @@ class PlaceMazeNet(SimpleMazeNet):
 
 ModelCatalog.register_custom_model("simple_maze_net", SimpleMazeNet)
 ModelCatalog.register_custom_model("place_maze_net", PlaceMazeNet)
+ModelCatalog.register_custom_model("memory_maze_net", MemoryMazeNet)

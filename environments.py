@@ -100,7 +100,9 @@ class FoggedMazeEnv(MazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
         self._visualRange = config.get("visualRange", 4)
+        self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
+        self._memory = None
         self._places = dict()
         mazeSize = len(self._mazeArray)
         counter = 0
@@ -109,12 +111,15 @@ class FoggedMazeEnv(MazeEnv):
                 if self._mazeArray[i][j] > 0:
                     self._places[(i, j)] = counter
                     counter += 1
-        self.observation_space = gym.spaces.Dict(
-            {
-                "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
-                "place": gym.spaces.MultiBinary(counter),
-            }
-        )
+        obsDict = {
+            "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
+            "place": gym.spaces.MultiBinary(counter),
+        }
+        if self._memoryLen > 1:
+            obsDict["memory"] = gym.spaces.MultiBinary(
+                (self._memoryLen, visualObsSize, visualObsSize, 3)
+            )
+        self.observation_space = gym.spaces.Dict(obsDict)
 
     def _getObs(self):
         placeOneHot = np.zeros(len(self._places), dtype=np.int32)
@@ -154,7 +159,20 @@ class FoggedMazeEnv(MazeEnv):
             vision[: upZeroIdx[-1], 4, :] = 0
         if len(downZeroIdx):
             vision[5 + downZeroIdx[0] :, 4, :] = 0
-        return {
+
+        obsDict = {
             "vision": vision,
             "place": placeOneHot,
         }
+        if self._memoryLen > 1:
+            if not self._memory:
+                self._memory = [vision] * self._memoryLen
+            else:
+                self._memory.append(vision)
+                self._memory.pop(0)
+            obsDict["memory"] = np.array(self._memory)
+        return obsDict
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self._memory = None
+        return super().reset(seed=seed)

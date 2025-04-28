@@ -25,7 +25,9 @@ def manualRun(mazeSize: int, agent: Algorithm, env: MazeEnv, envConfig):
         )[0]
         obs, reward, done, _, info = env.step(action)  # Step the environment
         steps += 1
-        maze[env._agentLocation[0]][env._agentLocation[1]] += 1
+        agentLocationValue = maze[env._agentLocation[0]][env._agentLocation[1]]
+        if agentLocationValue < 9:
+            maze[env._agentLocation[0]][env._agentLocation[1]] += 1
         totalReward += reward
     print_maze(maze)
     print("Reward:", totalReward)

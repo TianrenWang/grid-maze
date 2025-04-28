@@ -82,7 +82,7 @@ class MazeEnv(gym.Env):
         if (
             0 <= newLoc[0] < len(self._mazeArray)
             and 0 <= newLoc[1] < len(self._mazeArray)
-            and self._mazeArray[newLoc[0]][newLoc[1]]
+            and self._mazeArray[newLoc[0]][newLoc[1]] == 1
         ):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc

@@ -12,6 +12,7 @@ class MazeEnv(gym.Env):
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
+        self._gateCloseRate = config.get("gateCloseRate", 0)
         mazeSize = len(self._mazeArray)
 
         self._map = None
@@ -63,7 +64,12 @@ class MazeEnv(gym.Env):
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
-        mazeChannel = np.where(mazeChannel > 1, 1, mazeChannel)
+        gateClosed = np.random.choice(
+            [0, 1],
+            size=mazeChannel.shape,
+            p=[self._gateCloseRate, 1 - self._gateCloseRate],
+        )
+        mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         return self._getObs(), self._get_info()

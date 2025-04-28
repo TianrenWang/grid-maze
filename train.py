@@ -25,6 +25,7 @@ parser.add_argument("--fixedStart", type=bool, default=True)
 parser.add_argument("--fogged", type=bool, default=False)
 parser.add_argument("--placeCells", type=bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=0)
+parser.add_argument("--gateCloseRate", type=float, default=0)
 args = parser.parse_args()
 
 
@@ -89,6 +90,7 @@ if __name__ == "__main__":
         "start": [1, 1] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
+        "gateCloseRate": args.gateCloseRate,
     }
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()

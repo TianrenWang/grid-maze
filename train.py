@@ -9,6 +9,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 
 from maze import generate_maze, print_maze
 from environments import MazeEnv, FoggedMazeEnv
+from test import manualRun
 import models  # noqa: F401
 
 parser = argparse.ArgumentParser()
@@ -58,9 +59,11 @@ if __name__ == "__main__":
     else:
         model = "simple_maze_net"
 
+    env = FoggedMazeEnv if args.fogged else MazeEnv
+
     agentConfig = (
         PPOConfig()
-        .environment(FoggedMazeEnv if args.fogged else MazeEnv)
+        .environment(env)
         .api_stack(
             enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False
         )
@@ -108,3 +111,5 @@ if __name__ == "__main__":
                 datetime.now(),
             )
             agent.save(checkpointPath)
+
+    manualRun(mazeSize, agent, env, environmentConfig)

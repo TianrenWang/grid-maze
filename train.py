@@ -111,5 +111,4 @@ if __name__ == "__main__":
                 datetime.now(),
             )
             agent.save(checkpointPath)
-
-    manualRun(mazeSize, agent, env, environmentConfig)
+            manualRun(mazeSize, agent, env, environmentConfig)

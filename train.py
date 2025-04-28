@@ -24,7 +24,7 @@ parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=bool, default=True)
 parser.add_argument("--fogged", type=bool, default=False)
 parser.add_argument("--placeCells", type=bool, default=False)
-parser.add_argument("--memoryLen", type=int, default=5)
+parser.add_argument("--memoryLen", type=int, default=0)
 args = parser.parse_args()
 
 

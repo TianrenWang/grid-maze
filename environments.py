@@ -35,9 +35,6 @@ class MazeEnv(gym.Env):
             3: np.array([0, -1]),
         }
 
-    def _get_obs(self):
-        return self._map
-
     def _get_info(self):
         return {"location": self._agentLocation}
 

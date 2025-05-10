@@ -84,12 +84,11 @@ if __name__ == "__main__":
                 }
             ),
         )
-        .learners(num_gpus_per_learner=1)
+        .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .training(
             lr=args.lr,
             entropy_coeff=0.01,
         )
-        .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
             evaluation_interval=args.evalInterval,
             evaluation_num_env_runners=8,

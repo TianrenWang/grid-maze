@@ -84,6 +84,7 @@ if __name__ == "__main__":
                 }
             ),
         )
+        .learners(num_gpus_per_learner=1)
         .training(
             lr=args.lr,
             entropy_coeff=0.01,

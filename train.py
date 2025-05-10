@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     for i in range(args.numLearn):
         result = agent.train()
-        if "evaluation" in result:
+        if i % args.evalInterval == 0:
             print(
                 f"Iteration {i + 1}:",
                 np.rint(result["evaluation"]["env_runners"]["episode_return_mean"]),

@@ -35,9 +35,6 @@ class MazeEnv(gym.Env):
             3: np.array([0, -1]),
         }
 
-    def _get_obs(self):
-        return self._map
-
     def _get_info(self):
         return {"location": self._agentLocation}
 
@@ -82,7 +79,7 @@ class MazeEnv(gym.Env):
         if (
             0 <= newLoc[0] < len(self._mazeArray)
             and 0 <= newLoc[1] < len(self._mazeArray)
-            and self._mazeArray[newLoc[0]][newLoc[1]] == 1
+            and self._map[newLoc[0], newLoc[1], 0] == 1
         ):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc

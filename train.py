@@ -6,6 +6,10 @@ import argparse
 
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
+from ray.rllib.core import DEFAULT_MODULE_ID
+
 
 from maze import generate_maze, print_maze
 from environments import MazeEnv, FoggedMazeEnv
@@ -53,33 +57,38 @@ if __name__ == "__main__":
     print_maze(maze)
 
     if args.placeCells:
-        model = "place_maze_net"
+        module = models.PlaceMazeModule
     elif args.memoryLen > 1 and args.fogged:
-        model = "memory_maze_net"
+        module = models.MemoryMazeModule
     else:
-        model = "simple_maze_net"
+        module = models.SimpleMazeModule
 
     env = FoggedMazeEnv if args.fogged else MazeEnv
 
     agentConfig = (
         PPOConfig()
         .environment(env)
-        .api_stack(
-            enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False
+        .rl_module(
+            rl_module_spec=MultiRLModuleSpec(
+                rl_module_specs={
+                    DEFAULT_MODULE_ID: RLModuleSpec(
+                        module_class=module,
+                        model_config={
+                            "hiddenSize": args.hiddenSize,
+                            "numLayers": args.numLayers,
+                            "inputSize": visionRange * 2 + 1
+                            if args.fogged
+                            else mazeSize,
+                        },
+                    ),
+                }
+            ),
         )
+        .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .training(
-            model={
-                "custom_model": model,
-                "custom_model_config": {
-                    "hiddenSize": args.hiddenSize,
-                    "numLayers": args.numLayers,
-                    "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
-                },
-            },
             lr=args.lr,
             entropy_coeff=0.01,
         )
-        .resources(num_gpus=1 if torch.cuda.is_available() else 0)
         .evaluation(
             evaluation_interval=args.evalInterval,
             evaluation_num_env_runners=8,
@@ -103,12 +112,21 @@ if __name__ == "__main__":
 
     for i in range(args.numLearn):
         result = agent.train()
-        if "evaluation" in result:
+        if "evaluation" in result and i % args.evalInterval == 0:
             print(
                 f"Iteration {i + 1}:",
-                np.rint(result["evaluation"]["env_runners"]["episode_reward_mean"]),
+                np.rint(result["evaluation"]["env_runners"]["episode_return_mean"]),
                 " - ",
                 datetime.now(),
             )
             agent.save(checkpointPath)
-            manualRun(mazeSize, agent, env, environmentConfig)
+            module = RLModule.from_checkpoint(
+                os.path.join(
+                    checkpointPath,
+                    "learner_group",
+                    "learner",
+                    "rl_module",
+                    DEFAULT_MODULE_ID,
+                )
+            )
+            manualRun(mazeSize, module, env, environmentConfig)

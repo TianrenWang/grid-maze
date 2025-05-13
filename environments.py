@@ -101,9 +101,13 @@ class MazeEnv(gym.Env):
             if terminated
             else (
                 -np.max(
-                    np.sum(np.abs(self._agentLocation - np.array(self._goalLocation)))
-                    / 100,
-                    0.1,
+                    [
+                        np.sum(
+                            np.abs(self._agentLocation - np.array(self._goalLocation))
+                        )
+                        / 100,
+                        0.1,
+                    ]
                 )
             )
         )

@@ -92,14 +92,20 @@ class MazeEnv(gym.Env):
         truncated = self._episode_len == self._maxSteps
         """
         In a 19x19 maze, the vertical and horizontal distances is 17 in each
-        dimension, which means it would start with a penalty of 34/10 = 3.4 for
-        each step stuck in the initial position.
+        dimension, which means it would start with a penalty of 34/100 = 0.34
+        for each step stuck in the initial position. Penalty will not reach
+        below 0.1.
         """
         reward = (
             500
             if terminated
-            else -np.sum(np.abs(self._agentLocation - np.array(self._goalLocation)))
-            / 10
+            else (
+                -np.max(
+                    np.sum(np.abs(self._agentLocation - np.array(self._goalLocation)))
+                    / 100,
+                    0.1,
+                )
+            )
         )
         return self._getObs(), reward, terminated, truncated, self._get_info()
 

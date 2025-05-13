@@ -85,6 +85,7 @@ class MazeEnv(gym.Env):
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
         dithered = np.array_equal(self._agentLocation, self._pastLocation)
+        ditherFactor = 3 if dithered else 1
         self._pastLocation = initialLocation
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
@@ -109,6 +110,7 @@ class MazeEnv(gym.Env):
                         0.1,
                     ]
                 )
+                * ditherFactor
             )
         )
         return self._getObs(), reward, terminated, truncated, self._get_info()

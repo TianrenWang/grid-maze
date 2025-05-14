@@ -85,12 +85,34 @@ class MazeEnv(gym.Env):
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
         dithered = np.array_equal(self._agentLocation, self._pastLocation)
+        ditherFactor = 3 if dithered else 1
         self._pastLocation = initialLocation
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len == self._maxSteps
-        reward = 500 if terminated else -0.3 if dithered else -0.1
+        """
+        In a 19x19 maze, the vertical and horizontal distances is 17 in each
+        dimension, which means it would start with a penalty of 34/100 = 0.34
+        for each step stuck in the initial position. Penalty will not reach
+        below 0.1.
+        """
+        reward = (
+            500
+            if terminated
+            else (
+                -np.max(
+                    [
+                        np.sum(
+                            np.abs(self._agentLocation - np.array(self._goalLocation))
+                        )
+                        / 100,
+                        0.1,
+                    ]
+                )
+                * ditherFactor
+            )
+        )
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

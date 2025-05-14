@@ -99,7 +99,7 @@ class MazeEnv(gym.Env):
         reward = (
             500
             if terminated
-            else (
+            else -(
                 np.sum(np.abs(self._agentLocation - np.array(self._goalLocation))) / 100
                 + 0.1
             )

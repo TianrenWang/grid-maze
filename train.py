@@ -107,8 +107,14 @@ if __name__ == "__main__":
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
     checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{args.expName}"
+    defaultPolicyPath = (
+        checkpointPath + "/learner_group/learner/rl_module/default_policy"
+    )
     if os.path.exists(checkpointPath):
-        agent.restore(checkpointPath)
+        agent.restore_from_path(
+            defaultPolicyPath,
+            component=defaultPolicyPath,
+        )
 
     for i in range(args.numLearn):
         result = agent.train()

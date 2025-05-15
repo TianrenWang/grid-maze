@@ -90,7 +90,7 @@ class MazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len == self._maxSteps
-        reward = 500 if terminated else -0.3 if dithered else -0.1
+        reward = 500 if terminated else -0.1
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

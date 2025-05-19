@@ -122,7 +122,7 @@ if __name__ == "__main__":
             learner_class=PPOTorchLearnerWithCuriosity,
             learner_config_dict={
                 "intrinsic_reward_coeff": 0.05,
-                "forward_loss_weight": 0.8,
+                "forward_loss_weight": 0.2,
             },
         )
         .evaluation(

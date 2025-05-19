@@ -75,7 +75,7 @@ class MazeEnv(gym.Env):
         initialLocation = self._agentLocation
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        dithered = False
+        # dithered = False
         if (
             0 <= newLoc[0] < len(self._mazeArray)
             and 0 <= newLoc[1] < len(self._mazeArray)
@@ -84,13 +84,13 @@ class MazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
-        dithered = np.array_equal(self._agentLocation, self._pastLocation)
+        # dithered = np.array_equal(self._agentLocation, self._pastLocation)
         self._pastLocation = initialLocation
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len == self._maxSteps
-        reward = 500 if terminated else -0.1
+        reward = 1 if terminated else -0.0001
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):

@@ -22,7 +22,8 @@ def manualRun(mazeSize: int, module: RLModule, env: MazeEnv, envConfig):
         rl_module_out = module.forward_inference(batched_obs)
         logits = convert_to_numpy(rl_module_out[Columns.ACTION_DIST_INPUTS])
         action = np.random.choice(env.action_space.n, p=softmax(logits[0]))
-        obs, reward, done, _, info = env.step(action)
+        obs, reward, done, truncated, info = env.step(action)
+        done = done or truncated
         steps += 1
         agentLocationValue = maze[env._agentLocation[0]][env._agentLocation[1]]
         if agentLocationValue < 9:

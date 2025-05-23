@@ -1,4 +1,5 @@
 from typing import Optional
+from collections import deque
 import numpy as np
 import gymnasium as gym
 
@@ -11,7 +12,7 @@ class MazeEnv(gym.Env):
         self._mazeArray = config["maze"]
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
-        self._maxSteps = config["maxSteps"]
+        self._maxSteps = None
         self._gateCloseRate = config.get("gateCloseRate", 0)
         mazeSize = len(self._mazeArray)
 
@@ -41,6 +42,33 @@ class MazeEnv(gym.Env):
     def _getObs(self):
         return {"vision": self._map}
 
+    def getShortestDistance(self):
+        size = len(self._mazeArray)
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        queue = deque([(1, 1, 0)])
+
+        visited = set()
+        visited.add((0, 0))
+        maze = self._map[:, :, 0].squeeze().tolist()
+
+        while queue:
+            r, c, dist = queue.popleft()
+            if (r, c) == (size - 2, size - 2):
+                return dist
+
+            for dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if (
+                    0 <= nr < size
+                    and 0 <= nc < size
+                    and maze[nr][nc] == 1
+                    and (nr, nc) not in visited
+                ):
+                    visited.add((nr, nc))
+                    queue.append((nr, nc, dist + 1))
+
+        return -1
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         mazeSize = len(self._mazeArray)
@@ -69,6 +97,7 @@ class MazeEnv(gym.Env):
         mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
+        self._maxSteps = self.getShortestDistance() + 5
         return self._getObs(), self._get_info()
 
     def step(self, action):

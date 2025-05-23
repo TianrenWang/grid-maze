@@ -28,7 +28,11 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         self.value_branch = nn.Linear(self.linearHiddenSize, 1)
 
     def _forward_intermediate(self, batch):
-        mapInput = batch[Columns.OBS]["vision"].permute(0, 3, 1, 2).to(torch.float32)
+        mapInput = batch[Columns.OBS]
+        if type(mapInput) is dict:
+            mapInput = mapInput["vision"]
+        mapInput = torch.reshape(mapInput, [-1, self.inputSize, self.inputSize, 3])
+        mapInput = mapInput.permute(0, 3, 1, 2).to(torch.float32)
         mapOutput = self.primaryConvModule(mapInput)
         return self.prePredictionHead(mapOutput)
 

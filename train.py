@@ -148,9 +148,12 @@ if __name__ == "__main__":
     for i in range(args.numLearn):
         result = agent.train()
         if "evaluation" in result and i % args.evalInterval == 0:
+            returnMean = np.round(
+                result["evaluation"]["env_runners"]["episode_return_mean"], 2
+            )
             print(
                 f"Iteration {i + 1}:",
-                np.round(result["evaluation"]["env_runners"]["episode_return_mean"], 2),
+                returnMean,
                 " - ",
                 datetime.now(),
             )
@@ -165,3 +168,5 @@ if __name__ == "__main__":
                 )
             )
             manualRun(mazeSize, module, env, environmentConfig)
+            if returnMean > 0.99:
+                break

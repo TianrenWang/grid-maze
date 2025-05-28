@@ -12,7 +12,7 @@ class MazeEnv(gym.Env):
         self._mazeArray = config["maze"]
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
-        self._maxSteps = None
+        self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
         mazeSize = len(self._mazeArray)
 
@@ -97,7 +97,8 @@ class MazeEnv(gym.Env):
         mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
-        self._maxSteps = self.getShortestDistance() + 5
+        if not self._maxSteps:
+            self._maxSteps = self.getShortestDistance()
         return self._getObs(), self._get_info()
 
     def step(self, action):
@@ -118,7 +119,7 @@ class MazeEnv(gym.Env):
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
-        truncated = self._episode_len == self._maxSteps
+        truncated = self._episode_len > self._maxSteps
         reward = 1 if terminated else 0
         return self._getObs(), reward, terminated, truncated, self._get_info()
 

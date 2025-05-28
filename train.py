@@ -30,7 +30,7 @@ parser.add_argument("--mazeSize", type=int, default=19)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
-parser.add_argument("--maxSteps", type=int, default=5000)
+parser.add_argument("--maxSteps", type=int, default=None)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=2000)
@@ -73,6 +73,16 @@ if __name__ == "__main__":
         module = models.SimpleMazeModule
 
     env = FoggedMazeEnv if args.fogged else MazeEnv
+    trainingEnvConfig = {
+        "maze": maze,
+        "goal": list(goalLocation),
+        "start": [1, 1] if args.fixedStart else None,
+        "maxSteps": args.maxSteps,
+        "memoryLen": args.memoryLen,
+        "gateCloseRate": args.gateCloseRate,
+    }
+    evalEnvConfig = trainingEnvConfig.copy()
+    evalEnvConfig["maxSteps"] = None
 
     agentConfig = (
         PPOConfig()
@@ -116,6 +126,13 @@ if __name__ == "__main__":
             },
         )
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
+        .evaluation(
+            evaluation_interval=args.evalInterval,
+            evaluation_num_env_runners=8,
+            evaluation_duration_unit="episodes",
+            evaluation_duration=256,
+            evaluation_config={"env_config": evalEnvConfig},
+        )
         .training(
             lr=args.lr,
             entropy_coeff=0.01,
@@ -125,22 +142,8 @@ if __name__ == "__main__":
                 "forward_loss_weight": 0.2,
             },
         )
-        .evaluation(
-            evaluation_interval=args.evalInterval,
-            evaluation_num_env_runners=8,
-            evaluation_duration_unit="episodes",
-            evaluation_duration=256,
-        )
     )
-    environmentConfig = {
-        "maze": maze,
-        "goal": list(goalLocation),
-        "start": [1, 1] if args.fixedStart else None,
-        "maxSteps": args.maxSteps,
-        "memoryLen": args.memoryLen,
-        "gateCloseRate": args.gateCloseRate,
-    }
-    agentConfig.env_config = environmentConfig
+    agentConfig.env_config = trainingEnvConfig
     agent = agentConfig.build_algo()
     checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{args.expName}"
     if os.path.exists(checkpointPath):
@@ -167,6 +170,6 @@ if __name__ == "__main__":
                     DEFAULT_MODULE_ID,
                 )
             )
-            manualRun(mazeSize, module, env, environmentConfig)
+            manualRun(mazeSize, module, env, evalEnvConfig)
             if returnMean > 0.99:
                 break

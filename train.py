@@ -7,17 +7,7 @@ import argparse
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
-from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
-    PPOTorchLearnerWithCuriosity,
-    ICM_MODULE_ID,
-)
 from ray.rllib.core import DEFAULT_MODULE_ID
-from ray.rllib.examples.rl_modules.classes.intrinsic_curiosity_model_rlm import (
-    IntrinsicCuriosityModel,
-)
-from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
-from ray.rllib.connectors.env_to_module import FlattenObservations
 
 
 from maze import generate_maze, print_maze
@@ -85,43 +75,18 @@ if __name__ == "__main__":
     agentConfig = (
         PPOConfig()
         .environment(env)
-        .env_runners(
-            env_to_module_connector=lambda env: FlattenObservations(),
-        )
         .api_stack(
             enable_rl_module_and_learner=True, enable_env_runner_and_connector_v2=True
         )
         .rl_module(
-            rl_module_spec=MultiRLModuleSpec(
-                rl_module_specs={
-                    DEFAULT_MODULE_ID: RLModuleSpec(
-                        module_class=module,
-                        model_config={
-                            "hiddenSize": args.hiddenSize,
-                            "numLayers": args.numLayers,
-                            "inputSize": visionRange * 2 + 1
-                            if args.fogged
-                            else mazeSize,
-                        },
-                    ),
-                    ICM_MODULE_ID: RLModuleSpec(
-                        module_class=IntrinsicCuriosityModel,
-                        learner_only=True,
-                        model_config={
-                            "feature_dim": 288,
-                            "feature_net_hiddens": (256, 256),
-                            "feature_net_activation": "relu",
-                            "inverse_net_hiddens": (256, 256),
-                            "inverse_net_activation": "relu",
-                            "forward_net_hiddens": (256, 256),
-                            "forward_net_activation": "relu",
-                        },
-                    ),
-                }
-            ),
-            algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: AlgorithmConfig.overrides(lr=0.0005)
-            },
+            rl_module_spec=RLModuleSpec(
+                module_class=module,
+                model_config={
+                    "hiddenSize": args.hiddenSize,
+                    "numLayers": args.numLayers,
+                    "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
+                },
+            )
         )
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .evaluation(
@@ -133,11 +98,6 @@ if __name__ == "__main__":
         .training(
             lr=args.lr,
             entropy_coeff=0.01,
-            learner_class=PPOTorchLearnerWithCuriosity,
-            learner_config_dict={
-                "intrinsic_reward_coeff": 0.05,
-                "forward_loss_weight": 0.2,
-            },
         )
     )
     agentConfig.env_config = environmentConfig

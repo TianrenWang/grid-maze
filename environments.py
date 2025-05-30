@@ -14,6 +14,8 @@ class MazeEnv(gym.Env):
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
+        self._visited = []
+        self._shortestDistance = None
         mazeSize = len(self._mazeArray)
 
         self._map = None
@@ -42,7 +44,7 @@ class MazeEnv(gym.Env):
     def _getObs(self):
         return {"vision": self._map}
 
-    def getShortestDistance(self):
+    def _getShortestDistance(self):
         size = len(self._mazeArray)
         directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         queue = deque([(1, 1, 0)])
@@ -69,8 +71,29 @@ class MazeEnv(gym.Env):
 
         return -1
 
+    def _addVisited(self, coordinate: tuple[int, int]):
+        visitedIndex = -1
+        for i in range(len(self._visited)):
+            if self._visited[i][0] == coordinate:
+                visitedIndex = i
+                visited = self._visited[i]
+                self._visited[i] = (coordinate, visited[1] + 1)
+                break
+        if visitedIndex == -1:
+            self._visited = [(coordinate, 1)] + self._visited
+        else:
+            while (
+                visitedIndex < len(self._visited) - 1
+                and self._visited[visitedIndex][1] > self._visited[visitedIndex + 1][1]
+            ):
+                tempVisited = self._visited[visitedIndex]
+                self._visited[visitedIndex] = self._visited[visitedIndex + 1]
+                self._visited[visitedIndex + 1] = tempVisited
+                visitedIndex += 1
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
+        self._visited = []
         mazeSize = len(self._mazeArray)
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation, self._goalLocation, 0] = 1
@@ -97,8 +120,7 @@ class MazeEnv(gym.Env):
         mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
-        if not self._maxSteps:
-            self._maxSteps = self.getShortestDistance()
+        self._shortestDistance = self._getShortestDistance()
         return self._getObs(), self._get_info()
 
     def step(self, action):
@@ -117,9 +139,15 @@ class MazeEnv(gym.Env):
         # dithered = np.array_equal(self._agentLocation, self._pastLocation)
         self._pastLocation = initialLocation
 
+        visitedCoordinate = tuple(self._agentLocation.tolist())
+        self._addVisited(visitedCoordinate)
+        medianIndex = int(len(self._visited) / 4 * 3)
+        median = self._visited[medianIndex][1]
+        actualMaxSteps = min(median * self._shortestDistance, self._maxSteps)
+
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
-        truncated = self._episode_len > self._maxSteps
+        truncated = self._episode_len > actualMaxSteps
         reward = 1 if terminated else 0
         return self._getObs(), reward, terminated, truncated, self._get_info()
 

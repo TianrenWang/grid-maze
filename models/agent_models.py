@@ -17,11 +17,15 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         self.linearHiddenSize = self.hiddenSize * 8
         self.primaryConvModule = SimpleConv(self.hiddenSize)
         primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
+        linearInputSize = primaryConvModuleOutSize**2 * self.hiddenSize * 2
         self.prePredictionHead = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(
-                primaryConvModuleOutSize**2 * self.hiddenSize * 2, self.linearHiddenSize
-            ),
+            nn.Linear(linearInputSize, self.linearHiddenSize),
+            nn.ReLU(),
+        )
+        self.placeProcessor = nn.Sequential(
+            nn.Linear(2 * self.inputSize**2, linearInputSize),
+            nn.ReLU(),
+            nn.Linear(linearInputSize, linearInputSize),
             nn.ReLU(),
         )
         self.policy_branch = nn.Linear(self.linearHiddenSize, self.action_space.n)
@@ -34,7 +38,12 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         mapInput = torch.reshape(mapInput, [-1, self.inputSize, self.inputSize, 3])
         mapInput = mapInput.permute(0, 3, 1, 2).to(torch.float32)
         mapOutput = self.primaryConvModule(mapInput)
-        return self.prePredictionHead(mapOutput)
+        agentPlace = torch.flatten(mapInput[:, 2, :, :], start_dim=1)
+        goalPlace = torch.flatten(mapInput[:, 1, :, :], start_dim=1)
+        placeOutput = self.placeProcessor(torch.concat((agentPlace, goalPlace), dim=1))
+        return self.prePredictionHead(
+            torch.flatten(mapOutput, start_dim=1) + placeOutput
+        )
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):

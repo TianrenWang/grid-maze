@@ -53,8 +53,9 @@ class MemoryMazeModule(SimpleMazeModule):
             self.linearHiddenSize, self.linearHiddenSize, batch_first=True
         )
 
-    def _forward(self, input_dict, state, seq_lens):
-        memory = input_dict["obs"]["memory"]
+    def _forward_intermediate(self, batch):
+        mapInput = batch[Columns.OBS]
+        memory = mapInput["memory"]
         memoryShape = memory.shape
         memory = memory.reshape(-1, *memoryShape[2:])
         memory = memory.permute(0, 3, 1, 2).to(torch.float32)
@@ -63,15 +64,7 @@ class MemoryMazeModule(SimpleMazeModule):
         memoryFeatures = memoryFeatures.reshape(*memoryShape[:2], self.linearHiddenSize)
         _, currentStateFeatures = self.trajectoryMemory(memoryFeatures)
         currentStateFeatures = currentStateFeatures.squeeze(0)
-        policy = self.policy_branch(currentStateFeatures)
-        self._value_out = self.value_branch(currentStateFeatures).squeeze(1)
-        return {Columns.ACTION_DIST_INPUTS: policy}
-
-    def compute_values(self, batch):
-        assert self._value_out is not None, (
-            "forward() must be called before value_function()"
-        )
-        return self._value_out
+        return currentStateFeatures
 
 
 class PlaceMazeModule(SimpleMazeModule):

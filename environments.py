@@ -22,7 +22,6 @@ class MazeEnv(gym.Env):
             if self._startLocation
             else None
         )
-        self._pastLocation = self._agentLocation
         self.observation_space = gym.spaces.Dict(
             {
                 "vision": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
@@ -102,10 +101,8 @@ class MazeEnv(gym.Env):
         return self._getObs(), self._get_info()
 
     def step(self, action):
-        initialLocation = self._agentLocation
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        # dithered = False
         if (
             0 <= newLoc[0] < len(self._mazeArray)
             and 0 <= newLoc[1] < len(self._mazeArray)
@@ -114,8 +111,6 @@ class MazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
-        # dithered = np.array_equal(self._agentLocation, self._pastLocation)
-        self._pastLocation = initialLocation
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1

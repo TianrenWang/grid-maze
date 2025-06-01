@@ -15,7 +15,7 @@ from environments import MazeEnv, FoggedMazeEnv
 import models  # noqa: F401
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=19)
+parser.add_argument("--mazeSize", type=int, default=11)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)

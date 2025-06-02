@@ -97,7 +97,7 @@ class MazeEnv(gym.Env):
         gateClosed = np.random.choice(
             [0, 1],
             size=mazeChannel.shape,
-            p=[self._gateCloseRate, 1 - actualGateCloseRate],
+            p=[actualGateCloseRate, 1 - actualGateCloseRate],
         )
         mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)

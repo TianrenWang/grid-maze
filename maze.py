@@ -26,9 +26,11 @@ def generate_maze(dimensions: tuple[int], goal: tuple[int]):
                 midR = r + dr // 2
                 midC = c + dc // 2
                 if maze[nr][nc] == 0:
-                    maze[midR][midC] = 1  # Remove wall between
+                    maze[midR][midC] = (
+                        1 if random.random() > 0.1 else 2
+                    )  # Remove wall between
                     dfs(nr, nc)
-                elif maze[midR][midC] == 0 and random.random() > 0.9:
+                elif maze[midR][midC] == 0:
                     maze[midR][midC] = 2
 
     # Start DFS from a random odd coordinate

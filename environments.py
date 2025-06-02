@@ -99,8 +99,9 @@ class MazeEnv(gym.Env):
             size=mazeChannel.shape,
             p=[actualGateCloseRate, 1 - actualGateCloseRate],
         )
-        mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
-        self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
+        while self._map is None or self.getShortestDistance() == -1:
+            mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
+            self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         if not self._maxSteps:
             self._maxSteps = self.getShortestDistance()

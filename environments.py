@@ -2,6 +2,7 @@ from typing import Optional
 from collections import deque
 import numpy as np
 import gymnasium as gym
+import random
 
 from maze import print_maze
 
@@ -88,10 +89,15 @@ class MazeEnv(gym.Env):
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
+        probLimit = self._gateCloseRate * 2
+        if probLimit < 1:
+            actualGateCloseRate = random.random() * probLimit
+        else:
+            actualGateCloseRate = random.uniform(probLimit - 1, 1)
         gateClosed = np.random.choice(
             [0, 1],
             size=mazeChannel.shape,
-            p=[self._gateCloseRate, 1 - self._gateCloseRate],
+            p=[self._gateCloseRate, 1 - actualGateCloseRate],
         )
         mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)

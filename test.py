@@ -13,7 +13,7 @@ def manualRun(mazeSize: int, module: RLModule, env: MazeEnv, envConfig):
     done = False
     steps = 0
     totalReward = 0
-    maze = [[0 for i in range(mazeSize)] for i in range(mazeSize)]
+    maze = env._map[:, :, 0].squeeze().tolist()
 
     while not done and steps < 1000:
         batched_obs = {

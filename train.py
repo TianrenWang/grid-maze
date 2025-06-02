@@ -12,6 +12,7 @@ from ray.rllib.core import DEFAULT_MODULE_ID
 
 from maze import generate_maze, print_maze
 from environments import MazeEnv, FoggedMazeEnv
+from test import manualRun
 import models  # noqa: F401
 
 parser = argparse.ArgumentParser()
@@ -126,3 +127,4 @@ if __name__ == "__main__":
                     DEFAULT_MODULE_ID,
                 )
             )
+            manualRun(mazeSize, module, env, environmentConfig)

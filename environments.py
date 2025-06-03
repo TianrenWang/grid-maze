@@ -4,18 +4,19 @@ import numpy as np
 import gymnasium as gym
 import random
 
-from maze import print_maze
+from maze import print_maze, generate_maze
 
 
 class MazeEnv(gym.Env):
     def __init__(self, config=None):
         self._episode_len = 0
         self._mazeArray = config["maze"]
+        self._mazeSize = config["mazeSize"]
+        self._randomMaze = not self._mazeArray
         self._goalLocation = config["goal"]
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
-        mazeSize = len(self._mazeArray)
 
         self._map = None
         self._agentLocation = (
@@ -25,7 +26,7 @@ class MazeEnv(gym.Env):
         )
         self.observation_space = gym.spaces.Dict(
             {
-                "vision": gym.spaces.MultiBinary((mazeSize, mazeSize, 3)),
+                "vision": gym.spaces.MultiBinary((self._mazeSize, self._mazeSize, 3)),
             }
         )
         self.action_space = gym.spaces.Discrete(4)
@@ -71,6 +72,14 @@ class MazeEnv(gym.Env):
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
+        if self._randomMaze:
+            self._mazeArray = None
+        while not self._mazeArray or not self._mazeArray[1][1]:
+            self._mazeArray = generate_maze(
+                (self._mazeSize, self._mazeSize),
+                (self._mazeSize - 2, self._mazeSize - 2),
+            )
+
         mazeSize = len(self._mazeArray)
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation, self._goalLocation, 0] = 1
@@ -99,10 +108,8 @@ class MazeEnv(gym.Env):
             size=mazeChannel.shape,
             p=[actualGateCloseRate, 1 - actualGateCloseRate],
         )
-        self._map = None
-        while self._map is None or self.getShortestDistance() == -1:
-            mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
-            self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
+        mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
+        self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         if not self._maxSteps:
             self._maxSteps = self.getShortestDistance()

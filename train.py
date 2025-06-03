@@ -18,9 +18,10 @@ import models  # noqa: F401
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=11)
 parser.add_argument("--mazeName", type=str, default="default_maze")
+parser.add_argument("--randomMaze", type=bool, default=False)
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
-parser.add_argument("--maxSteps", type=int, default=None)
+parser.add_argument("--maxSteps", type=int, default=1000)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=2000)
@@ -64,12 +65,13 @@ if __name__ == "__main__":
 
     env = FoggedMazeEnv if args.fogged else MazeEnv
     environmentConfig = {
-        "maze": maze,
+        "maze": None if args.randomMaze else maze,
         "goal": list(goalLocation),
         "start": [1, 1] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
         "gateCloseRate": args.gateCloseRate,
+        "mazeSize": mazeSize,
     }
 
     agentConfig = (

@@ -147,16 +147,8 @@ class FoggedMazeEnv(MazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._memory = None
         self._places = dict()
-        mazeSize = len(self._mazeArray)
-        counter = 0
-        for i in range(mazeSize):
-            for j in range(mazeSize):
-                if self._mazeArray[i][j] > 0:
-                    self._places[(i, j)] = counter
-                    counter += 1
         obsDict = {
             "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
-            "place": gym.spaces.MultiBinary(counter),
         }
         if self._memoryLen > 1:
             obsDict["memory"] = gym.spaces.MultiBinary(
@@ -165,8 +157,6 @@ class FoggedMazeEnv(MazeEnv):
         self.observation_space = gym.spaces.Dict(obsDict)
 
     def _getObs(self):
-        placeOneHot = np.zeros(len(self._places), dtype=np.int32)
-        placeOneHot[self._places[tuple(self._agentLocation.tolist())]] = 1
         paddedMap = np.pad(
             self._map,
             (
@@ -203,10 +193,7 @@ class FoggedMazeEnv(MazeEnv):
         if len(downZeroIdx):
             vision[5 + downZeroIdx[0] :, 4, :] = 0
 
-        obsDict = {
-            "vision": vision,
-            "place": placeOneHot,
-        }
+        obsDict = {"vision": vision}
         if self._memoryLen > 1:
             if not self._memory:
                 self._memory = [vision] * self._memoryLen

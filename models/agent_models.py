@@ -54,6 +54,9 @@ class MemoryMazeModule(SimpleMazeModule):
         )
 
     def _forward_intermediate(self, batch):
+        initialHidden = None
+        if "next_state_in" in batch:
+            initialHidden = batch["next_state_in"].unsqueeze(0)
         mapInput = batch[Columns.OBS]
         memory = mapInput["memory"]
         memoryShape = memory.shape
@@ -62,9 +65,25 @@ class MemoryMazeModule(SimpleMazeModule):
         memoryFeatures = self.primaryConvModule(memory)
         memoryFeatures = self.prePredictionHead(memoryFeatures)
         memoryFeatures = memoryFeatures.reshape(*memoryShape[:2], self.linearHiddenSize)
-        _, currentStateFeatures = self.trajectoryMemory(memoryFeatures)
+        allHiddenStates, currentStateFeatures = self.trajectoryMemory(
+            memoryFeatures, initialHidden
+        )
         currentStateFeatures = currentStateFeatures.squeeze(0)
-        return currentStateFeatures
+        initialStateFeatures = allHiddenStates[:, 0, :].squeeze(1)
+        return currentStateFeatures, initialStateFeatures
+
+    @override(TorchRLModule)
+    def _forward(self, batch, **kwargs):
+        currentStateFeatures, initialStateFeatures = self._forward_intermediate(batch)
+        policy = self.policy_branch(currentStateFeatures)
+        return {
+            Columns.ACTION_DIST_INPUTS: policy,
+            Columns.NEXT_STATE_IN: initialStateFeatures,
+        }
+
+    @override(ValueFunctionAPI)
+    def compute_values(self, batch, embeddings=None):
+        return self.value_branch(self._forward_intermediate(batch)[0])
 
 
 class PlaceMazeModule(SimpleMazeModule):

@@ -10,15 +10,15 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule
 from ray.rllib.core import DEFAULT_MODULE_ID
 
 
-from maze import generate_maze, print_maze
+from maze import generateMaze, print_maze
 from environments import MazeEnv, FoggedMazeEnv
 from test import manualRun
 import models  # noqa: F401
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=11)
+parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
-parser.add_argument("--randomMaze", type=bool, default=False)
+parser.add_argument("--randomMaze", type=bool, default=True)
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=1000)
@@ -27,9 +27,9 @@ parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=2000)
 parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=bool, default=True)
-parser.add_argument("--fogged", type=bool, default=False)
+parser.add_argument("--fogged", type=bool, default=True)
 parser.add_argument("--placeCells", type=bool, default=False)
-parser.add_argument("--memoryLen", type=int, default=0)
+parser.add_argument("--memoryLen", type=int, default=10)
 parser.add_argument("--gateCloseRate", type=float, default=0)
 args = parser.parse_args()
 
@@ -42,19 +42,20 @@ if __name__ == "__main__":
     mazesPath = "mazes"
     visionRange = 4
 
-    if not os.path.exists(mazesPath):
-        os.makedirs(mazesPath)
-    mazes = os.listdir(mazesPath)
+    if not args.randomMaze:
+        if not os.path.exists(mazesPath):
+            os.makedirs(mazesPath)
+        mazes = os.listdir(mazesPath)
 
-    if f"{mazeName}.pkl" in mazes:
-        with open(f"{mazesPath}/{mazeName}.pkl", "rb") as file:
-            maze = pickle.load(file)
-    else:
-        maze = generate_maze(mazeDimension, goalLocation)
-        with open(f"{mazesPath}/{mazeName}.pkl", "wb") as file:
-            pickle.dump(maze, file)
+        if f"{mazeName}.pkl" in mazes:
+            with open(f"{mazesPath}/{mazeName}.pkl", "rb") as file:
+                maze = pickle.load(file)
+        else:
+            maze = generateMaze(mazeDimension, goalLocation)
+            with open(f"{mazesPath}/{mazeName}.pkl", "wb") as file:
+                pickle.dump(maze, file)
 
-    print_maze(maze)
+        print_maze(maze)
 
     if args.placeCells:
         module = models.PlaceMazeModule
@@ -66,8 +67,8 @@ if __name__ == "__main__":
     env = FoggedMazeEnv if args.fogged else MazeEnv
     environmentConfig = {
         "maze": None if args.randomMaze else maze,
-        "goal": list(goalLocation),
-        "start": [1, 1] if args.fixedStart else None,
+        "goal": None,
+        "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
         "gateCloseRate": args.gateCloseRate,

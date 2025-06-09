@@ -1,7 +1,7 @@
 import random
 
 
-def generate_maze(dimensions: tuple[int], goal: tuple[int]):
+def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     rows, cols = dimensions
     # Ensure odd dimensions for proper walls
     if rows % 2 == 0:
@@ -36,16 +36,33 @@ def generate_maze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
+def generateMaze(size: int, p_obstacle: float = 0.02):
+    maze = [[1 for _ in range(size)] for _ in range(size)]
+    for i in range(size):
+        for j in range(size):
+            if random.random() < p_obstacle:
+                obstacleHeight = random.randint(1, 5)
+                obstacleWidth = random.randint(1, 5)
+                if (
+                    i <= size // 2 < i + obstacleHeight
+                    and j <= size // 2 < j + obstacleWidth
+                ):
+                    continue
+                for x in range(obstacleWidth):
+                    for y in range(obstacleHeight):
+                        if -1 < i + y < size and -1 < j + x < size:
+                            maze[i + y][j + x] = 0
+    return maze
+
+
 def print_maze(maze):
+    print("".join("." for i in range(len(maze) + 2)))
     for row in maze:
-        rowContent = "".join(str(cell) if cell else " " for cell in row)
-        if rowContent.strip():
-            print("." + rowContent[1:-1] + ".")
-        else:
-            print("." * len(row))
+        rowContent = "".join(str(cell) for cell in row)
+        print("." + rowContent + ".")
+    print("".join("." for i in range(len(maze) + 2)))
 
 
 if __name__ == "__main__":
-    rows, cols = 13, 13  # Define maze size (must be odd numbers)
-    maze = generate_maze((rows, cols), (7, 7))
+    maze = generateMaze(30)
     print_maze(maze)

@@ -4,7 +4,7 @@ import numpy as np
 import gymnasium as gym
 import random
 
-from maze import print_maze, generate_maze
+from maze import print_maze, generateMaze
 
 
 class MazeEnv(gym.Env):
@@ -73,14 +73,18 @@ class MazeEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         if self._randomMaze:
-            self._mazeArray = None
-        while not self._mazeArray or not self._mazeArray[1][1]:
-            self._mazeArray = generate_maze(
-                (self._mazeSize, self._mazeSize),
-                (self._mazeSize - 2, self._mazeSize - 2),
-            )
+            self._mazeArray = generateMaze(self._mazeSize)
 
         mazeSize = len(self._mazeArray)
+        if self._goalLocation is None:
+            goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
+            while (
+                not self._mazeArray[goalLocation[0]][goalLocation[1]]
+                or goalLocation[0] == mazeSize // 2
+                and goalLocation[1] == mazeSize // 2
+            ):
+                goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
+            self._goalLocation = goalLocation
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation, self._goalLocation, 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
@@ -172,26 +176,32 @@ class FoggedMazeEnv(MazeEnv):
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
             :,
         ]
-        mask = np.zeros((9, 9, 3), dtype=bool)
-        mask[4, :] = True
-        mask[:, 4] = True
-        vision[~mask] = 0
-        leftVision = vision[4, :4, 0].squeeze().flatten()
-        leftZeroIdx = np.where(leftVision == 0)[0]
-        rightVision = vision[4, 5:, 0].squeeze().flatten()
-        rightZeroIdx = np.where(rightVision == 0)[0]
-        upVision = vision[:4, 4, 0].squeeze().flatten()
-        upZeroIdx = np.where(upVision == 0)[0]
-        downVision = vision[5:, 4, 0].squeeze().flatten()
-        downZeroIdx = np.where(downVision == 0)[0]
-        if len(leftZeroIdx):
-            vision[4, : leftZeroIdx[-1], :] = 0
-        if len(rightZeroIdx):
-            vision[4, 5 + rightZeroIdx[0] :, :] = 0
-        if len(upZeroIdx):
-            vision[: upZeroIdx[-1], 4, :] = 0
-        if len(downZeroIdx):
-            vision[5 + downZeroIdx[0] :, 4, :] = 0
+        """
+        The following logic imposes obstructed vision that was more
+        accurate when the maze path was 1 unit wide. Now that we
+        switch to more of an open field style maze, it is no longer
+        applicable.
+        """
+        # mask = np.zeros((9, 9, 3), dtype=bool)
+        # mask[4, :] = True
+        # mask[:, 4] = True
+        # vision[~mask] = 0
+        # leftVision = vision[4, :4, 0].squeeze().flatten()
+        # leftZeroIdx = np.where(leftVision == 0)[0]
+        # rightVision = vision[4, 5:, 0].squeeze().flatten()
+        # rightZeroIdx = np.where(rightVision == 0)[0]
+        # upVision = vision[:4, 4, 0].squeeze().flatten()
+        # upZeroIdx = np.where(upVision == 0)[0]
+        # downVision = vision[5:, 4, 0].squeeze().flatten()
+        # downZeroIdx = np.where(downVision == 0)[0]
+        # if len(leftZeroIdx):
+        #     vision[4, : leftZeroIdx[-1], :] = 0
+        # if len(rightZeroIdx):
+        #     vision[4, 5 + rightZeroIdx[0] :, :] = 0
+        # if len(upZeroIdx):
+        #     vision[: upZeroIdx[-1], 4, :] = 0
+        # if len(downZeroIdx):
+        #     vision[5 + downZeroIdx[0] :, 4, :] = 0
 
         obsDict = {"vision": vision}
         if self._memoryLen > 1:

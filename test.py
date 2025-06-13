@@ -24,11 +24,15 @@ def manualRun(mazeSize: int, module: RLModule, env: MazeEnv, envConfig):
             elif env._mazeArray[i][j] == 1:
                 mazeTracker[i][j] = 0
 
+    previousState = None
     while not done and steps < 1000:
         batched_obs = {
             Columns.OBS: {k: torch.from_numpy(v).unsqueeze(0) for k, v in obs.items()}
         }
+        if previousState is not None:
+            batched_obs[Columns.NEXT_STATE_IN] = previousState
         rl_module_out = module.forward_inference(batched_obs)
+        previousState = torch.reshape(rl_module_out[Columns.NEXT_STATE_IN], [1, -1])
         logits = convert_to_numpy(rl_module_out[Columns.ACTION_DIST_INPUTS])
         action = np.random.choice(env.action_space.n, p=softmax(logits[0]))
         obs, reward, done, truncated, info = env.step(action)

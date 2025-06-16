@@ -86,7 +86,7 @@ class MazeEnv(gym.Env):
                 goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._goalLocation = goalLocation
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
-        targetChannel[self._goalLocation, self._goalLocation, 0] = 1
+        targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
             agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)

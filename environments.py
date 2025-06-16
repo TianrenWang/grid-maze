@@ -150,15 +150,9 @@ class FoggedMazeEnv(MazeEnv):
         self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
         self._memory = None
-        self._places = dict()
-        obsDict = {
-            "vision": gym.spaces.MultiBinary((visualObsSize, visualObsSize, 3)),
-        }
-        if self._memoryLen > 1:
-            obsDict["memory"] = gym.spaces.MultiBinary(
-                (self._memoryLen, visualObsSize, visualObsSize, 3)
-            )
-        self.observation_space = gym.spaces.Dict(obsDict)
+        self.observation_space = gym.spaces.MultiBinary(
+            (visualObsSize, visualObsSize, 3)
+        )
 
     def _getObs(self):
         paddedMap = np.pad(
@@ -203,15 +197,14 @@ class FoggedMazeEnv(MazeEnv):
         # if len(downZeroIdx):
         #     vision[5 + downZeroIdx[0] :, 4, :] = 0
 
-        obsDict = {"vision": vision}
         if self._memoryLen > 1:
             if not self._memory:
-                self._memory = [vision] * self._memoryLen
+                self._memory = [vision]
             else:
                 self._memory.append(vision)
+            if len(self._memory) > self._memoryLen:
                 self._memory.pop(0)
-            obsDict["memory"] = np.array(self._memory)
-        return obsDict
+        return vision
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self._memory = None

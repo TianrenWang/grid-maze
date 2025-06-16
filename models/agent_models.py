@@ -53,37 +53,36 @@ class MemoryMazeModule(SimpleMazeModule):
             self.linearHiddenSize, self.linearHiddenSize, batch_first=True
         )
 
+    @override(TorchRLModule)
+    def get_initial_state(self):
+        return {
+            "h": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
+        }
+
     def _forward_intermediate(self, batch):
-        initialHidden = None
-        if "next_state_in" in batch:
-            initialHidden = batch["next_state_in"].unsqueeze(0)
-        mapInput = batch[Columns.OBS]
-        memory = mapInput["memory"]
-        memoryShape = memory.shape
-        memory = memory.reshape(-1, *memoryShape[2:])
-        memory = memory.permute(0, 3, 1, 2).to(torch.float32)
-        memoryFeatures = self.primaryConvModule(memory)
-        memoryFeatures = self.prePredictionHead(memoryFeatures)
-        memoryFeatures = memoryFeatures.reshape(*memoryShape[:2], self.linearHiddenSize)
-        allHiddenStates, currentStateFeatures = self.trajectoryMemory(
-            memoryFeatures, initialHidden
-        )
-        currentStateFeatures = currentStateFeatures.squeeze(0)
-        initialStateFeatures = allHiddenStates[:, 0, :].squeeze(1)
-        return currentStateFeatures, initialStateFeatures
+        initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
+        vision = batch[Columns.OBS]
+        visionShape = vision.shape
+        vision = vision.reshape(-1, *visionShape[2:])
+        vision = vision.permute(0, 3, 1, 2).to(torch.float32)
+        visionFeatures = self.primaryConvModule(vision)
+        visionFeatures = self.prePredictionHead(visionFeatures)
+        visionFeatures = visionFeatures.reshape(*visionShape[:2], self.linearHiddenSize)
+        return self.trajectoryMemory(visionFeatures, initialHidden)
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        currentStateFeatures, initialStateFeatures = self._forward_intermediate(batch)
-        policy = self.policy_branch(currentStateFeatures)
+        allHiddenStates, finalHiddenState = self._forward_intermediate(batch)
+        policy = self.policy_branch(allHiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
-            Columns.NEXT_STATE_IN: initialStateFeatures,
+            Columns.STATE_OUT: {"h": finalHiddenState.squeeze(0)},
+            Columns.EMBEDDINGS: allHiddenStates,
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
-        return self.value_branch(self._forward_intermediate(batch)[0])
+        return self.value_branch(self._forward_intermediate(batch)[0]).squeeze(-1)
 
 
 class PlaceMazeModule(SimpleMazeModule):

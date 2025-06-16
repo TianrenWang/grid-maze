@@ -88,6 +88,7 @@ if __name__ == "__main__":
                     "hiddenSize": args.hiddenSize,
                     "numLayers": args.numLayers,
                     "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
+                    "max_seq_len": 10,
                 },
             ),
         )

@@ -56,7 +56,7 @@ if __name__ == "__main__":
             with open(f"{mazesPath}/{mazeName}.pkl", "rb") as file:
                 maze = pickle.load(file)
         else:
-            maze = generateMaze(mazeDimension, goalLocation)
+            maze = generateMaze(mazeSize)
             with open(f"{mazesPath}/{mazeName}.pkl", "wb") as file:
                 pickle.dump(maze, file)
 

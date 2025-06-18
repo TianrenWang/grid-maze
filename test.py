@@ -14,15 +14,20 @@ def manualRun(mazeSize: int, module: RLModule, env: FoggedMazeEnv, envConfig):
     done = False
     steps = 0
     totalReward = 0
-    mazeTracker = env._mazeArray.copy()
+    mazeTracker = []
+    for i in range(mazeSize):
+        currentRow = []
+        mazeTracker.append(currentRow)
+        for j in range(mazeSize):
+            originalValue = env._mazeArray[i][j]
+            if not originalValue:
+                currentRow.append("X")
+            elif originalValue == 1:
+                currentRow.append(0)
+            else:
+                currentRow.append(originalValue)
     mazeTracker[mazeSize // 2][mazeSize // 2] = "S"
     mazeTracker[goalLocation[0]][goalLocation[1]] = "*"
-    for i in range(mazeSize):
-        for j in range(mazeSize):
-            if not env._mazeArray[i][j]:
-                mazeTracker[i][j] = "X"
-            elif env._mazeArray[i][j] == 1:
-                mazeTracker[i][j] = 0
 
     previousState = torch.zeros([1, module.linearHiddenSize], dtype=torch.float32)
     while not done and steps < 1000:
@@ -46,7 +51,7 @@ def manualRun(mazeSize: int, module: RLModule, env: FoggedMazeEnv, envConfig):
 
     for i in range(mazeSize):
         for j in range(mazeSize):
-            if not env._mazeArray[i][j]:
+            if not mazeTracker[i][j]:
                 mazeTracker[i][j] = " "
 
     print_maze(mazeTracker)

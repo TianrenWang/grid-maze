@@ -23,7 +23,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
-parser.add_argument("--randomMaze", type=str2bool, default=False)
+parser.add_argument("--randomMaze", type=str2bool, default=True)
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=1000)

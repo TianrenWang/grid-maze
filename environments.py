@@ -14,6 +14,7 @@ class MazeEnv(gym.Env):
         self._mazeSize = config["mazeSize"]
         self._randomMaze = not self._mazeArray
         self._goalLocation = config["goal"]
+        self._fixedGoal = bool(config["goal"])
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
@@ -76,7 +77,7 @@ class MazeEnv(gym.Env):
             self._mazeArray = generateMaze(self._mazeSize)
 
         mazeSize = len(self._mazeArray)
-        if self._goalLocation is None:
+        if not self._fixedGoal:
             goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             while (
                 not self._mazeArray[goalLocation[0]][goalLocation[1]]

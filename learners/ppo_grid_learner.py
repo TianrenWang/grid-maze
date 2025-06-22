@@ -35,5 +35,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
         localization_coeff = config.learner_config_dict["localization_coeff"]
         total_loss = base_total_loss + localization_coeff * placeLoss
-
+        self.metrics.log_value(
+            key=(module_id, "localization_loss"),
+            value=placeLoss,
+            window=1,
+        )
         return total_loss

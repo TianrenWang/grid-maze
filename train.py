@@ -131,6 +131,11 @@ if __name__ == "__main__":
     for i in range(args.numLearn):
         result = agent.train()
         if "evaluation" in result and i % args.evalInterval == 0:
+            if args.grid:
+                localizationLoss = np.round(
+                    result["learners"]["default_policy"]["localization_loss"], 2
+                )
+                print("Localization Loss:", localizationLoss)
             returnMean = np.round(
                 result["evaluation"]["env_runners"]["episode_return_mean"], 2
             )
@@ -138,7 +143,7 @@ if __name__ == "__main__":
                 f"Iteration {i + 1}:",
                 returnMean,
                 " - ",
-                datetime.now(),
+                str(datetime.now().date())[:-7],
             )
             agent.save(checkpointPath)
             module = RLModule.from_checkpoint(

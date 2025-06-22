@@ -102,7 +102,9 @@ class PlaceMazeModule(MemoryMazeModule):
     def _calculatePlace(self, agentLocation):
         formattedLocation = agentLocation.permute(0, 1, 4, 2, 3).to(torch.float32)
         formattedLocation = agentLocation.reshape([-1, 1, self.mazeSize, self.mazeSize])
-        kernel = torch.tensor([[[[1, 1, 1]] * 3]], dtype=torch.float32)
+        kernel = torch.ones(
+            [1, 1, 3, 3], dtype=torch.float32, device=formattedLocation.device
+        )
         with torch.no_grad():
             unweightedActivation = torch.nn.functional.conv2d(
                 formattedLocation,

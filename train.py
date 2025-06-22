@@ -11,8 +11,9 @@ from ray.rllib.core import DEFAULT_MODULE_ID
 
 
 from maze import generateMaze, print_maze
-from environments import MazeEnv, FoggedMazeEnv
+from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv
 from test import manualRun
+from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
 
@@ -21,7 +22,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=30)
+parser.add_argument("--mazeSize", type=int, default=31)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--randomMaze", type=str2bool, default=True)
 parser.add_argument("--hiddenSize", type=int, default=32)
@@ -33,7 +34,7 @@ parser.add_argument("--numLearn", type=int, default=2000)
 parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=str2bool, default=True)
 parser.add_argument("--fogged", type=str2bool, default=True)
-parser.add_argument("--placeCells", type=str2bool, default=False)
+parser.add_argument("--grid", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=10)
 parser.add_argument("--gateCloseRate", type=float, default=0)
 args = parser.parse_args()
@@ -62,14 +63,20 @@ if __name__ == "__main__":
 
         print_maze(maze)
 
-    if args.placeCells:
+    if args.grid:
         module = models.PlaceMazeModule
     elif args.memoryLen > 1 and args.fogged:
         module = models.MemoryMazeModule
     else:
         module = models.SimpleMazeModule
 
-    env = FoggedMazeEnv if args.fogged else MazeEnv
+    if args.grid:
+        env = PlaceMazeEnv
+    elif args.fogged:
+        env = FoggedMazeEnv
+    else:
+        env = MazeEnv
+
     environmentConfig = {
         "maze": None if args.randomMaze else maze,
         "goal": None,
@@ -109,6 +116,13 @@ if __name__ == "__main__":
             entropy_coeff=0.01,
         )
     )
+    if args.grid:
+        agentConfig.training(
+            learner_class=PPOTorchLearnerWithSelfPredLoss,
+            learner_config_dict={"localization_coeff": 0.02},
+            lr=args.lr,
+            entropy_coeff=0.01,
+        )
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
     checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{args.expName}"

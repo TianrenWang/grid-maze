@@ -18,6 +18,7 @@ class MazeEnv(gym.Env):
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
+        self._actionTaken = 4
 
         self._map = None
         self._agentLocation = (
@@ -131,6 +132,9 @@ class MazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
+            self._actionTaken = action
+        else:
+            self._actionTaken = 4
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
@@ -210,3 +214,26 @@ class FoggedMazeEnv(MazeEnv):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self._memory = None
         return super().reset(seed=seed)
+
+
+class PlaceMazeEnv(FoggedMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self.observation_space = gym.spaces.MultiBinary(
+            (visualObsSize**2 * 3 + self._mazeSize**2 + self.action_space.n + 1)
+        )
+
+    def _getObs(self):
+        vision = super()._getObs()
+        actionOneHot = np.zeros(5)
+        actionOneHot[self._actionTaken] = 1
+        return np.int8(
+            np.concatenate(
+                [
+                    vision.flatten(),
+                    self._map[:, :, 2].flatten(),
+                    actionOneHot,
+                ],
+            )
+        )

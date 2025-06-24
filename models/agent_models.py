@@ -91,7 +91,11 @@ class PlaceMazeModule(MemoryMazeModule):
         SimpleMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
         self.numCells = (self.mazeSize // 2) ** 2
-        self.gridDecoder = nn.Linear(self.numCells, self.numCells)
+        self.gridDecoder = nn.Sequential(
+            nn.Linear(self.numCells, self.numCells),
+            nn.Dropout(),
+            nn.Linear(self.numCells, self.numCells),
+        )
         self.pathIntegrator = nn.GRU(5, self.numCells, batch_first=True)
         self.trajectoryMemory = nn.GRU(
             self.linearHiddenSize + self.numCells,

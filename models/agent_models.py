@@ -96,11 +96,15 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Dropout(),
             nn.Linear(self.numCells, self.numCells),
         )
-        self.pathIntegrator = nn.GRU(5, self.numCells, batch_first=True)
+        self.pathIntegrator = nn.LSTM(5, self.numCells, batch_first=True)
         self.trajectoryMemory = nn.GRU(
             self.linearHiddenSize + self.numCells,
             self.linearHiddenSize,
             batch_first=True,
+        )
+        self.initialGridEncoder = nn.Sequential(
+            nn.Linear(self.numCells, self.numCells * 2),
+            nn.ReLU(),
         )
 
     def _calculatePlace(self, agentLocation):
@@ -122,9 +126,16 @@ class PlaceMazeModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def get_initial_state(self):
+        initialAgentLocation = torch.zeros((self.mazeSize**2,), dtype=torch.float32)
+        initialAgentLocation[self.mazeSize // 2] = 1
+        initialAgentLocation = torch.reshape(
+            initialAgentLocation, [1, 1, self.mazeSize, self.mazeSize, 1]
+        )
+        initialPlace = self._calculatePlace(initialAgentLocation).flatten()
         return {
             "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "hiddenGrid": torch.zeros((self.numCells,), dtype=torch.float32),
+            "candidateGrid": initialPlace,
+            "hiddenGrid": initialPlace,
         }
 
     def _getObsFromBatch(self, batch):
@@ -144,13 +155,22 @@ class PlaceMazeModule(MemoryMazeModule):
     def _processPreHeads(self, batch):
         vision, _, action = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
-        initialPlace = batch[Columns.STATE_IN]["hiddenGrid"]
+        hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
+        candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
+        initialGridMask = (torch.sum(hiddenGrid, 1) == 1)[:, None]
+        initialEncodedGrid = self.initialGridEncoder(hiddenGrid)
+        initialEncodedHidden = initialEncodedGrid[:, : self.numCells]
+        initialEncodedCandidate = initialEncodedGrid[:, self.numCells :]
+        hiddenGrid = torch.where(initialGridMask, initialEncodedHidden, hiddenGrid)
+        candidateGrid = torch.where(
+            initialGridMask, initialEncodedCandidate, candidateGrid
+        )
         gridStates, finalGridState = self.pathIntegrator(
-            action, initialPlace.unsqueeze(0)
+            action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )
         initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
         gridStatesMatchingObsHidden = torch.concat(
-            [initialPlace.unsqueeze(1), gridStates[:, :-1]], dim=1
+            [hiddenGrid.unsqueeze(1), gridStates[:, :-1]], dim=1
         )
         decodedGrid = self.gridDecoder(gridStatesMatchingObsHidden)
         decodedGrid = torch.nn.functional.dropout(decodedGrid)
@@ -168,13 +188,14 @@ class PlaceMazeModule(MemoryMazeModule):
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         _, agentLocation, _ = self._getObsFromBatch(batch)
-        hiddenStates, decodedGrid, hiddenGrid = self._processPreHeads(batch)
+        hiddenStates, decodedGrid, finalGrid = self._processPreHeads(batch)
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": hiddenStates[:, -1],
-                "hiddenGrid": hiddenGrid.squeeze(0),
+                "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid[0].squeeze(0),
             },
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": decodedGrid,

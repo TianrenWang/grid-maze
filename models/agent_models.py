@@ -90,22 +90,19 @@ class PlaceMazeModule(MemoryMazeModule):
     def setup(self):
         SimpleMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
-        self.numCells = (self.mazeSize // 2) ** 2
-        self.gridDecoder = nn.Sequential(
-            nn.Linear(self.numCells, self.numCells),
-            nn.Dropout(),
-            nn.Linear(self.numCells, self.numCells),
+        self.numPlaceCells = (self.mazeSize // 2) ** 2
+        self.gridSize = self.linearHiddenSize * 2
+        self.gridDecoder = nn.Linear(self.gridSize, self.gridSize)
+        self.placeProjector = nn.Sequential(
+            nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
-        self.pathIntegrator = nn.LSTM(5, self.numCells, batch_first=True)
+        self.pathIntegrator = nn.LSTM(5, self.gridSize, batch_first=True)
         self.trajectoryMemory = nn.GRU(
-            self.linearHiddenSize + self.numCells,
+            self.linearHiddenSize + self.gridSize,
             self.linearHiddenSize,
             batch_first=True,
         )
-        self.initialGridEncoder = nn.Sequential(
-            nn.Linear(self.numCells, self.numCells * 2),
-            nn.ReLU(),
-        )
+        self.initialStates = nn.Embedding(2, self.gridSize)
 
     def _calculatePlace(self, agentLocation):
         formattedLocation = agentLocation.permute(0, 1, 4, 2, 3).to(torch.float32)
@@ -126,16 +123,10 @@ class PlaceMazeModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def get_initial_state(self):
-        initialAgentLocation = torch.zeros((self.mazeSize**2,), dtype=torch.float32)
-        initialAgentLocation[self.mazeSize // 2] = 1
-        initialAgentLocation = torch.reshape(
-            initialAgentLocation, [1, 1, self.mazeSize, self.mazeSize, 1]
-        )
-        initialPlace = self._calculatePlace(initialAgentLocation).flatten()
         return {
             "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "candidateGrid": initialPlace,
-            "hiddenGrid": initialPlace,
+            "candidateGrid": torch.zeros((self.gridSize,), dtype=torch.float32),
+            "hiddenGrid": torch.zeros((self.gridSize,), dtype=torch.float32),
         }
 
     def _getObsFromBatch(self, batch):
@@ -157,10 +148,17 @@ class PlaceMazeModule(MemoryMazeModule):
         visionFeatures = self._processConvolution(vision)
         hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
         candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
-        initialGridMask = (torch.sum(hiddenGrid, 1) == 1)[:, None]
-        initialEncodedGrid = self.initialGridEncoder(hiddenGrid)
-        initialEncodedHidden = initialEncodedGrid[:, : self.numCells]
-        initialEncodedCandidate = initialEncodedGrid[:, self.numCells :]
+        initialGridMask = (torch.sum(hiddenGrid, 1) == 0)[:, None]
+        initialEncodedHidden: torch.Tensor = self.initialStates(torch.LongTensor([0]))
+        initialEncodedHidden = initialEncodedHidden.expand(
+            vision.shape[0], initialEncodedHidden.shape[1]
+        )
+        initialEncodedCandidate: torch.Tensor = self.initialStates(
+            torch.LongTensor([1])
+        )
+        initialEncodedCandidate = initialEncodedCandidate.expand(
+            vision.shape[0], initialEncodedCandidate.shape[1]
+        )
         hiddenGrid = torch.where(initialGridMask, initialEncodedHidden, hiddenGrid)
         candidateGrid = torch.where(
             initialGridMask, initialEncodedCandidate, candidateGrid
@@ -173,7 +171,7 @@ class PlaceMazeModule(MemoryMazeModule):
             [hiddenGrid.unsqueeze(1), gridStates[:, :-1]], dim=1
         )
         decodedGrid = self.gridDecoder(gridStatesMatchingObsHidden)
-        decodedGrid = torch.nn.functional.dropout(decodedGrid)
+        projectedPlace = self.placeProjector(decodedGrid)
         with torch.no_grad():
             decodedGridWithoutGrad = torch.Tensor(decodedGrid)
         visionAndGridFeatures = torch.concat(
@@ -181,14 +179,14 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         return (
             self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
-            decodedGrid,
+            projectedPlace,
             finalGridState,
         )
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         _, agentLocation, _ = self._getObsFromBatch(batch)
-        hiddenStates, decodedGrid, finalGrid = self._processPreHeads(batch)
+        hiddenStates, projectedPlace, finalGrid = self._processPreHeads(batch)
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -198,7 +196,7 @@ class PlaceMazeModule(MemoryMazeModule):
                 "hiddenGrid": finalGrid[0].squeeze(0),
             },
             Columns.EMBEDDINGS: hiddenStates,
-            "placeLogit": decodedGrid,
+            "placeLogit": projectedPlace,
             "placeTarget": self._calculatePlace(agentLocation),
         }
 

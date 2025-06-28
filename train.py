@@ -109,7 +109,7 @@ if __name__ == "__main__":
             evaluation_interval=args.evalInterval,
             evaluation_num_env_runners=8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=256,
+            evaluation_duration=128,
         )
         .training(
             lr=args.lr,

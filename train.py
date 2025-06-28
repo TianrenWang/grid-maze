@@ -143,7 +143,7 @@ if __name__ == "__main__":
                 f"Iteration {i + 1}:",
                 returnMean,
                 " - ",
-                datetime.now().date(),
+                datetime.now()[:-7],
             )
             agent.save(checkpointPath)
             module = RLModule.from_checkpoint(

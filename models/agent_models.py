@@ -149,12 +149,14 @@ class PlaceMazeModule(MemoryMazeModule):
         hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
         candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
         initialGridMask = (torch.sum(hiddenGrid, 1) == 0)[:, None]
-        initialEncodedHidden: torch.Tensor = self.initialStates(torch.LongTensor([0]))
+        initialEncodedHidden: torch.Tensor = self.initialStates(
+            torch.LongTensor([0], device=vision.device)
+        )
         initialEncodedHidden = initialEncodedHidden.expand(
             vision.shape[0], initialEncodedHidden.shape[1]
         )
         initialEncodedCandidate: torch.Tensor = self.initialStates(
-            torch.LongTensor([1])
+            torch.LongTensor([1], device=vision.device)
         )
         initialEncodedCandidate = initialEncodedCandidate.expand(
             vision.shape[0], initialEncodedCandidate.shape[1]

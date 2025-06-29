@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
@@ -90,7 +91,7 @@ class PlaceMazeModule(MemoryMazeModule):
     def setup(self):
         SimpleMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
-        self.numPlaceCells = (self.mazeSize // 2) ** 2
+        self.numPlaceCells = self.model_config.get("numPlaceCells", 32)
         self.gridSize = self.linearHiddenSize * 2
         self.gridDecoder = nn.Linear(self.gridSize, self.gridSize)
         self.placeProjector = nn.Sequential(
@@ -103,23 +104,22 @@ class PlaceMazeModule(MemoryMazeModule):
             batch_first=True,
         )
         self.initialStates = nn.Embedding(2, self.gridSize)
+        self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
+        self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
 
-    def _calculatePlace(self, agentLocation):
-        formattedLocation = agentLocation.permute(0, 1, 4, 2, 3).to(torch.float32)
-        formattedLocation = agentLocation.reshape([-1, 1, self.mazeSize, self.mazeSize])
-        kernel = torch.ones(
-            [1, 1, 3, 3], dtype=torch.float32, device=formattedLocation.device
-        )
+    def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():
-            unweightedActivation = torch.nn.functional.conv2d(
-                formattedLocation,
-                kernel,
-                stride=2,
+            agentLocationShape = agentLocation.shape
+            agentLocation = agentLocation.flatten(0, -2)
+            diff = agentLocation.unsqueeze(1) - self.placeCells.unsqueeze(0)
+            dists_squared = torch.sum(torch.abs(diff) ** 2, dim=-1)
+            unnormalized_activations = -dists_squared / (2 * self.fieldSize**2)
+            normalized_activations = torch.nn.functional.softmax(
+                unnormalized_activations, dim=1
             )
-            unweightedActivation = unweightedActivation.flatten(1)
-            totalActivation = torch.sum(unweightedActivation, dim=1, keepdim=True)
-            placeSignal = unweightedActivation / totalActivation
-            return placeSignal.reshape([*agentLocation.shape[:2], -1])
+            return normalized_activations.reshape(
+                [*agentLocationShape[:2], self.numPlaceCells]
+            )
 
     @override(TorchRLModule)
     def get_initial_state(self):
@@ -135,12 +135,10 @@ class PlaceMazeModule(MemoryMazeModule):
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
             vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
-        ).to(torch.float32)
-        agentLocation = obs[:, :, visionSize : visionSize + self.mazeSize**2]
-        agentLocation = agentLocation.reshape(
-            *agentLocation.shape[:2], self.mazeSize, self.mazeSize, 1
-        ).to(torch.float32)
-        action = obs[:, :, -5:].to(torch.float32)
+        )
+        agentLocation = obs[:, :, visionSize : visionSize + 2]
+        agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
+        action = obs[:, :, -5:]
         return vision, agentLocation, action
 
     def _processPreHeads(self, batch):
@@ -169,10 +167,7 @@ class PlaceMazeModule(MemoryMazeModule):
             action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )
         initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
-        gridStatesMatchingObsHidden = torch.concat(
-            [hiddenGrid.unsqueeze(1), gridStates[:, :-1]], dim=1
-        )
-        decodedGrid = self.gridDecoder(gridStatesMatchingObsHidden)
+        decodedGrid = self.gridDecoder(gridStates)
         projectedPlace = self.placeProjector(decodedGrid)
         with torch.no_grad():
             decodedGridWithoutGrad = torch.Tensor(decodedGrid)

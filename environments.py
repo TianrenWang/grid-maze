@@ -220,20 +220,19 @@ class PlaceMazeEnv(FoggedMazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
         visualObsSize = self._visualRange * 2 + 1
-        self.observation_space = gym.spaces.MultiBinary(
-            (visualObsSize**2 * 3 + self._mazeSize**2 + self.action_space.n + 1)
+        self.observation_space = gym.spaces.Box(
+            0, self._mazeSize, (visualObsSize**2 * 3 + 2 + self.action_space.n + 1,)
         )
 
     def _getObs(self):
         vision = super()._getObs()
         actionOneHot = np.zeros(5)
         actionOneHot[self._actionTaken] = 1
-        return np.int8(
-            np.concatenate(
-                [
-                    vision.flatten(),
-                    self._map[:, :, 2].flatten(),
-                    actionOneHot,
-                ],
-            )
+        return np.concatenate(
+            [
+                vision.flatten(),
+                self._agentLocation / (self._mazeSize - 1),
+                actionOneHot,
+            ],
+            dtype=np.float32,
         )

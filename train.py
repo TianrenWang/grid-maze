@@ -137,6 +137,10 @@ if __name__ == "__main__":
                     result["learners"]["default_policy"]["localization_loss"], 2
                 )
                 print("Localization Loss:", localizationLoss)
+                placeBias = np.round(
+                    result["learners"]["default_policy"]["place_bias"], 2
+                )
+                print("Place Bias:", placeBias)
             returnMean = np.round(
                 result["evaluation"]["env_runners"]["episode_return_mean"], 2
             )

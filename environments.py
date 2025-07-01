@@ -121,14 +121,17 @@ class MazeEnv(gym.Env):
             self._maxSteps = self.getShortestDistance()
         return self._getObs(), self._get_info()
 
+    def isValidLocation(self, location: np.ndarray):
+        return (
+            0 <= location[0] < len(self._mazeArray)
+            and 0 <= location[1] < len(self._mazeArray)
+            and self._map[location[0], location[1], 0] == 1
+        )
+
     def step(self, action):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        if (
-            0 <= newLoc[0] < len(self._mazeArray)
-            and 0 <= newLoc[1] < len(self._mazeArray)
-            and self._map[newLoc[0], newLoc[1], 0] == 1
-        ):
+        if self.isValidLocation(newLoc):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
@@ -236,3 +239,36 @@ class PlaceMazeEnv(FoggedMazeEnv):
             ],
             dtype=np.float32,
         )
+
+
+class SelfLocalizeEnv(PlaceMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        self._lastLocation = self._agentLocation
+        self._lastAction = np.random.randint(0, 4)
+        self._visitCounts = [
+            [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
+        ]
+
+    def step(self, action):
+        finalized = False
+        availableActions = [0, 1, 2, 3]
+        while not finalized:
+            availableActions.remove(action)
+            if len(availableActions):
+                action = np.random.choice(availableActions, 1)[0]
+            else:
+                finalized = True
+            direction = self._action_to_direction[action]
+            newLoc = self._agentLocation + direction
+            if (
+                self.isValidLocation(newLoc)
+                and self._visitCounts[newLoc[0]][newLoc[1]] < 3
+            ):
+                finalized = True
+
+        self._lastLocation = self._agentLocation
+        self._lastAction = action
+        stepOutput = super().step(action)
+        self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
+        return stepOutput

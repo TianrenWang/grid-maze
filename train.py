@@ -11,7 +11,7 @@ from ray.rllib.core import DEFAULT_MODULE_ID
 
 
 from maze import generateMaze, print_maze
-from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv
+from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from test import manualRun
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
@@ -35,9 +35,14 @@ parser.add_argument("--evalInterval", type=int, default=100)
 parser.add_argument("--fixedStart", type=str2bool, default=True)
 parser.add_argument("--fogged", type=str2bool, default=True)
 parser.add_argument("--grid", type=str2bool, default=False)
+parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=10)
 parser.add_argument("--gateCloseRate", type=float, default=0)
 args = parser.parse_args()
+
+
+def usesGrid():
+    return args.grid or args.selfLocalize
 
 
 if __name__ == "__main__":
@@ -63,14 +68,16 @@ if __name__ == "__main__":
 
         print_maze(maze)
 
-    if args.grid:
+    if usesGrid():
         module = models.PlaceMazeModule
     elif args.memoryLen > 1 and args.fogged:
         module = models.MemoryMazeModule
     else:
         module = models.SimpleMazeModule
 
-    if args.grid:
+    if args.selfLocalize:
+        env = SelfLocalizeEnv
+    elif args.grid:
         env = PlaceMazeEnv
     elif args.fogged:
         env = FoggedMazeEnv
@@ -117,10 +124,11 @@ if __name__ == "__main__":
             entropy_coeff=0.01,
         )
     )
-    if args.grid:
+    if usesGrid():
+        config = {"localization_coeff": 0.02, "self_localize": args.selfLocalize}
         agentConfig.training(
             learner_class=PPOTorchLearnerWithSelfPredLoss,
-            learner_config_dict={"localization_coeff": 0.02},
+            learner_config_dict=config,
             lr=args.lr,
             entropy_coeff=0.01,
         )
@@ -132,7 +140,7 @@ if __name__ == "__main__":
     for i in range(args.numLearn):
         result = agent.train()
         if "evaluation" in result and i % args.evalInterval == 0:
-            if args.grid:
+            if usesGrid():
                 localizationLoss = np.round(
                     result["learners"]["default_policy"]["localization_loss"], 2
                 )

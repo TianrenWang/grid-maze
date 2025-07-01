@@ -18,13 +18,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: Dict[str, Any],
         fwd_out: Dict[str, torch.Tensor],
     ):
-        base_total_loss = super().compute_loss_for_module(
-            module_id=module_id,
-            config=config,
-            batch=batch,
-            fwd_out=fwd_out,
-        )
-
         placeLogit = fwd_out["placeLogit"].flatten(0, 1)
         placeTarget = fwd_out["placeTarget"].flatten(0, 1)
         numCells = placeLogit[0].shape[0]
@@ -34,7 +27,17 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         placeTarget[maskIndices] = maskTensor
         placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
         localization_coeff = config.learner_config_dict["localization_coeff"]
-        total_loss = base_total_loss + localization_coeff * placeLoss
+        self_localize = config.learner_config_dict.get("self_localize")
+        if self_localize:
+            total_loss = localization_coeff * placeLoss
+        else:
+            base_total_loss = super().compute_loss_for_module(
+                module_id=module_id,
+                config=config,
+                batch=batch,
+                fwd_out=fwd_out,
+            )
+            total_loss = base_total_loss
         self.metrics.log_value(
             key=(module_id, "localization_loss"),
             value=placeLoss,

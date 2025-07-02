@@ -40,14 +40,14 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             total_loss = base_total_loss
         self.metrics.log_value(
             key=(module_id, "localization_loss"),
-            value=placeLoss,
-            window=1,
+            value=placeLoss.cpu(),
+            window=100,
         )
         targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)
         placeBias = torch.max(targetCounts) - torch.min(targetCounts)
         self.metrics.log_value(
             key=(module_id, "place_bias"),
-            value=placeBias,
-            window=1,
+            value=placeBias.cpu(),
+            window=100,
         )
         return total_loss

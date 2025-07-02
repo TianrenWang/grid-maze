@@ -92,18 +92,19 @@ class PlaceMazeModule(MemoryMazeModule):
         SimpleMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
         self.numPlaceCells = self.model_config.get("numPlaceCells", 32)
-        self.gridSize = self.linearHiddenSize * 2
-        self.gridDecoder = nn.Linear(self.gridSize, self.gridSize)
+        self.gridSize = 512
+        self.integratorSize = 128
+        self.gridDecoder = nn.Linear(self.integratorSize, self.gridSize)
         self.placeProjector = nn.Sequential(
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
-        self.pathIntegrator = nn.LSTM(5, self.gridSize, batch_first=True)
+        self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
         self.trajectoryMemory = nn.GRU(
             self.linearHiddenSize + self.gridSize,
             self.linearHiddenSize,
             batch_first=True,
         )
-        self.initialStates = nn.Embedding(2, self.gridSize)
+        self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
 
@@ -125,8 +126,8 @@ class PlaceMazeModule(MemoryMazeModule):
     def get_initial_state(self):
         return {
             "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "candidateGrid": torch.zeros((self.gridSize,), dtype=torch.float32),
-            "hiddenGrid": torch.zeros((self.gridSize,), dtype=torch.float32),
+            "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "hiddenGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
         }
 
     def _getObsFromBatch(self, batch):

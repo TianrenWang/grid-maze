@@ -151,8 +151,8 @@ class PlaceMazeModule(MemoryMazeModule):
         initialStates = self.placeEncoder(
             self._calculatePlace(lastAgentLocation)[:, 0, :]
         )
-        hiddenGrid = initialStates[:, : self.integratorSize]
-        candidateGrid = initialStates[:, self.integratorSize :]
+        hiddenGrid = initialStates[:, : self.integratorSize].contiguous()
+        candidateGrid = initialStates[:, self.integratorSize :].contiguous()
         gridStates, finalGridState = self.pathIntegrator(
             action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )

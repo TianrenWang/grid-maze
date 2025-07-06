@@ -25,22 +25,20 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         maskIndices = batch["loss_mask"].to(torch.int16).flatten() == 0
         placeLogit[maskIndices] = maskTensor
         placeTarget[maskIndices] = maskTensor
+        predictions = torch.nn.functional.softmax(placeLogit, 1)
         placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
-        localization_coeff = config.learner_config_dict["localization_coeff"]
-        self_localize = config.learner_config_dict.get("self_localize")
-        if self_localize:
-            total_loss = localization_coeff * placeLoss
-        else:
-            base_total_loss = super().compute_loss_for_module(
-                module_id=module_id,
-                config=config,
-                batch=batch,
-                fwd_out=fwd_out,
-            )
-            total_loss = base_total_loss
+        predictionError = torch.mean(torch.sum(torch.abs(predictions - placeTarget), 1))
+        total_loss = super().compute_loss_for_module(
+            module_id=module_id,
+            config=config,
+            batch=batch,
+            fwd_out=fwd_out,
+        )
+        if predictionError >= 0.01:
+            total_loss += placeLoss
         self.metrics.log_value(
-            key=(module_id, "localization_loss"),
-            value=placeLoss.cpu().detach().numpy(),
+            key=(module_id, "prediction_error"),
+            value=predictionError.cpu().detach().numpy(),
             window=100,
         )
         targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)

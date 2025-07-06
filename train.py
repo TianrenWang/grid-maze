@@ -141,10 +141,10 @@ if __name__ == "__main__":
         result = agent.train()
         if "evaluation" in result and i % args.evalInterval == 0:
             if usesGrid():
-                localizationLoss = np.round(
-                    result["learners"]["default_policy"]["localization_loss"], 2
+                predictionError = np.round(
+                    result["learners"]["default_policy"]["prediction_error"], 2
                 )
-                print("Localization Loss:", localizationLoss)
+                print("Prediction Error:", predictionError)
                 placeBias = np.round(
                     result["learners"]["default_policy"]["place_bias"], 2
                 )

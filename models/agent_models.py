@@ -107,6 +107,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
+        self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
 
     def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():
@@ -137,33 +138,21 @@ class PlaceMazeModule(MemoryMazeModule):
         vision = torch.reshape(
             vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
         )
-        agentLocation = obs[:, :, visionSize : visionSize + 2]
+        lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
+        lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
+        agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
         agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
         action = obs[:, :, -5:]
-        return vision, agentLocation, action
+        return vision, lastAgentLocation, agentLocation, action
 
     def _processPreHeads(self, batch):
-        vision, _, action = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
-        hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
-        candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
-        initialGridMask = (torch.sum(hiddenGrid, 1) == 0)[:, None]
-        initialEncodedHidden: torch.Tensor = self.initialStates(
-            torch.tensor([0], device=vision.device)
+        initialStates = self.placeEncoder(
+            self._calculatePlace(lastAgentLocation)[:, 0, :]
         )
-        initialEncodedHidden = initialEncodedHidden.expand(
-            vision.shape[0], initialEncodedHidden.shape[1]
-        )
-        initialEncodedCandidate: torch.Tensor = self.initialStates(
-            torch.tensor([1], device=vision.device)
-        )
-        initialEncodedCandidate = initialEncodedCandidate.expand(
-            vision.shape[0], initialEncodedCandidate.shape[1]
-        )
-        hiddenGrid = torch.where(initialGridMask, initialEncodedHidden, hiddenGrid)
-        candidateGrid = torch.where(
-            initialGridMask, initialEncodedCandidate, candidateGrid
-        )
+        hiddenGrid = initialStates[:, : self.integratorSize].contiguous()
+        candidateGrid = initialStates[:, self.integratorSize :].contiguous()
         gridStates, finalGridState = self.pathIntegrator(
             action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )
@@ -183,7 +172,7 @@ class PlaceMazeModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        _, agentLocation, _ = self._getObsFromBatch(batch)
+        _, _, agentLocation, _ = self._getObsFromBatch(batch)
         hiddenStates, projectedPlace, finalGrid = self._processPreHeads(batch)
         policy = self.policy_branch(hiddenStates)
         return {

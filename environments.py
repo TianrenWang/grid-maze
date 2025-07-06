@@ -244,11 +244,15 @@ class PlaceMazeEnv(FoggedMazeEnv):
 class SelfLocalizeEnv(PlaceMazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self._lastAction = np.random.randint(0, 4)
         self._visitCounts = [
             [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
         ]
+        self.observation_space = gym.spaces.Box(
+            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+        )
 
     def step(self, action):
         finalized = False
@@ -272,3 +276,17 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         stepOutput = super().step(action)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
         return stepOutput
+
+    def _getObs(self):
+        vision = super()._getObs()
+        actionOneHot = np.zeros(5)
+        actionOneHot[self._actionTaken] = 1
+        return np.concatenate(
+            [
+                vision[: (self._visualRange * 2 + 1) ** 2 * 3],
+                self._lastLocation / (self._mazeSize - 1),
+                self._agentLocation / (self._mazeSize - 1),
+                actionOneHot,
+            ],
+            dtype=np.float32,
+        )

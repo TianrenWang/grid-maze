@@ -1,6 +1,7 @@
 from ray.rllib.core.columns import Columns
 from ray.rllib.utils.numpy import convert_to_numpy, softmax
 from ray.rllib.core.rl_module.rl_module import RLModule
+import random
 import numpy as np
 import torch
 from environments import FoggedMazeEnv, PlaceMazeEnv
@@ -32,15 +33,21 @@ def manualRun(
     mazeTracker[goalLocation[0]][goalLocation[1]] = "*"
 
     previousState = module.get_initial_state()
+    actualObs = None
     while not done and steps < 1000:
+        obs = torch.from_numpy(obs).unsqueeze(0).unsqueeze(0)
+        if random.random() < 1 / envConfig["memoryLen"] or actualObs is None:
+            actualObs = obs
+        else:
+            actualObs = torch.concat([actualObs, obs], dim=1)
         batched_obs = {
-            Columns.OBS: torch.from_numpy(obs).unsqueeze(0).unsqueeze(0),
+            Columns.OBS: actualObs,
             Columns.STATE_IN: {
                 k: torch.reshape(v, [1, -1]) for k, v in previousState.items()
             },
         }
         rl_module_out = module.forward_inference(batched_obs)
-        logits = convert_to_numpy(rl_module_out[Columns.ACTION_DIST_INPUTS])[0, 0]
+        logits = convert_to_numpy(rl_module_out[Columns.ACTION_DIST_INPUTS])[0, -1]
         action = np.random.choice(env.action_space.n, p=softmax(logits))
         obs, reward, done, truncated, info = env.step(action)
         done = done or truncated

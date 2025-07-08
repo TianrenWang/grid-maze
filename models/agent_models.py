@@ -99,8 +99,12 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
         self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
+        self.memoryEncoder = nn.Sequential(
+            nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
+            nn.ReLU(),
+        )
         self.trajectoryMemory = nn.GRU(
-            self.linearHiddenSize + self.gridSize,
+            self.linearHiddenSize,
             self.linearHiddenSize,
             batch_first=True,
         )
@@ -164,8 +168,9 @@ class PlaceMazeModule(MemoryMazeModule):
         visionAndGridFeatures = torch.concat(
             [visionFeatures, decodedGridWithoutGrad], dim=2
         )
+        visionAndGridFeatures = self.memoryEncoder(visionAndGridFeatures)
         return (
-            self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
+            self.trajectoryMemory(visionFeatures, initialHidden)[0],
             projectedPlace,
             finalGridState,
         )

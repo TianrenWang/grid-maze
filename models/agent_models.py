@@ -127,6 +127,36 @@ class PlaceMazeModule(MemoryMazeModule):
                 [*agentLocationShape[:2], self.numPlaceCells]
             )
 
+    """
+    Following code is used to figure out how dramatically place code can change
+    between moving squares.
+
+    def _calculatePlace(self, agentLocation: torch.Tensor):
+        coordinates = [[[i, j] for i in range(31)] for j in range(31)]
+        coordinates = torch.tensor(coordinates, dtype=torch.float32)
+        coordinates = coordinates / 30
+        coordinates = coordinates.flatten(0, -2)
+        with torch.no_grad():
+            agentLocationShape = agentLocation.shape
+            agentLocation = coordinates
+            diff = agentLocation.unsqueeze(1) - self.placeCells.unsqueeze(0)
+            dists_squared = torch.sum(torch.abs(diff) ** 2, dim=-1)
+            unnormalized_activations = -dists_squared / (2 * self.fieldSize**2)
+            normalized_activations = torch.nn.functional.softmax(
+                unnormalized_activations, dim=1
+            )
+            normDiff = normalized_activations.unsqueeze(
+                1
+            ) - normalized_activations.unsqueeze(0)
+            normDiffSum = torch.sum(torch.abs(normDiff), dim=2)
+            sorted, _ = torch.sort(normDiffSum)
+            print(torch.round(torch.mean(sorted, dim=0), decimals=2)[:20])
+            raise Exception("dogshit")
+            return normalized_activations.reshape(
+                [*agentLocationShape[:2], self.numPlaceCells]
+            )
+    """
+
     @override(TorchRLModule)
     def get_initial_state(self):
         return {

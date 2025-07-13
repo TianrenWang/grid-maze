@@ -19,6 +19,8 @@ class MazeEnv(gym.Env):
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
         self._actionTaken = 4
+        self._debugging = config["debugging"]
+        self._mazeTracker = []
 
         self._map = None
         self._agentLocation = (
@@ -87,6 +89,23 @@ class MazeEnv(gym.Env):
             ):
                 goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._goalLocation = goalLocation
+
+        if self._debugging:
+            self._mazeTracker = []
+            for i in range(self._mazeSize):
+                currentRow = []
+                self._mazeTracker.append(currentRow)
+                for j in range(self._mazeSize):
+                    originalValue = self._mazeArray[i][j]
+                    if not originalValue:
+                        currentRow.append("X")
+                    elif originalValue == 1:
+                        currentRow.append(0)
+                    else:
+                        currentRow.append(originalValue)
+            self._mazeTracker[self._mazeSize // 2][self._mazeSize // 2] = "S"
+            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
+
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
@@ -143,12 +162,23 @@ class MazeEnv(gym.Env):
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
         reward = 1 if terminated else 0
+        if self._debugging:
+            agentLocationValue = self._mazeTracker[self._agentLocation[0]][
+                self._agentLocation[1]
+            ]
+            if isinstance(agentLocationValue, int) and agentLocationValue < 9:
+                self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] += 1
+            if terminated or truncated:
+                self.render()
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
-        mazeClone = [[item for item in row] for row in self._mazeArray]
-        mazeClone[self._agentLocation[0]][self._agentLocation[1]] = 3
-        print_maze(mazeClone)
+        for i in range(self._mazeSize):
+            for j in range(self._mazeSize):
+                if not self._mazeTracker[i][j]:
+                    self._mazeTracker[i][j] = " "
+        print_maze(self._mazeTracker)
+        print("Steps:", self._episode_len)
 
 
 class FoggedMazeEnv(MazeEnv):

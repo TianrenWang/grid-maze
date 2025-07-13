@@ -6,13 +6,13 @@ import argparse
 
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule
-from ray.rllib.core import DEFAULT_MODULE_ID
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule  # noqa: F401
+from ray.rllib.core import DEFAULT_MODULE_ID  # noqa: F401
 
 
 from maze import generateMaze, print_maze
 from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
-from test import manualRun
+from test import manualRun  # noqa: F401
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -38,6 +38,7 @@ parser.add_argument("--grid", type=str2bool, default=False)
 parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=10)
 parser.add_argument("--gateCloseRate", type=float, default=0)
+parser.add_argument("--debug", type=str2bool, default=False)
 args = parser.parse_args()
 
 
@@ -92,6 +93,7 @@ if __name__ == "__main__":
         "memoryLen": args.memoryLen,
         "gateCloseRate": args.gateCloseRate,
         "mazeSize": mazeSize,
+        "debugging": args.debug,
     }
 
     agentConfig = (
@@ -115,9 +117,9 @@ if __name__ == "__main__":
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .evaluation(
             evaluation_interval=args.evalInterval,
-            evaluation_num_env_runners=8,
+            evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=128,
+            evaluation_duration=1 if args.debug else 128,
         )
         .training(
             lr=args.lr,
@@ -137,35 +139,39 @@ if __name__ == "__main__":
     checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{args.expName}"
     if os.path.exists(checkpointPath):
         agent.restore_from_path(checkpointPath)
-    for i in range(args.numLearn):
-        result = agent.train()
-        if "evaluation" in result and i % args.evalInterval == 0:
-            if usesGrid():
-                predictionError = np.round(
-                    result["learners"]["default_policy"]["prediction_error"], 2
+    if args.debug:
+        for i in range(10):
+            agent.evaluate()
+    else:
+        for i in range(args.numLearn):
+            result = agent.train()
+            if "evaluation" in result and i % args.evalInterval == 0:
+                if usesGrid():
+                    predictionError = np.round(
+                        result["learners"]["default_policy"]["prediction_error"], 2
+                    )
+                    print("Prediction Error:", predictionError)
+                    placeBias = np.round(
+                        result["learners"]["default_policy"]["place_bias"], 2
+                    )
+                    print("Place Bias:", placeBias)
+                returnMean = np.round(
+                    result["evaluation"]["env_runners"]["episode_return_mean"], 2
                 )
-                print("Prediction Error:", predictionError)
-                placeBias = np.round(
-                    result["learners"]["default_policy"]["place_bias"], 2
+                print(
+                    f"Iteration {i + 1}:",
+                    returnMean,
+                    " - ",
+                    str(datetime.now())[:-7],
                 )
-                print("Place Bias:", placeBias)
-            returnMean = np.round(
-                result["evaluation"]["env_runners"]["episode_return_mean"], 2
-            )
-            print(
-                f"Iteration {i + 1}:",
-                returnMean,
-                " - ",
-                str(datetime.now())[:-7],
-            )
-            agent.save(checkpointPath)
-            module = RLModule.from_checkpoint(
-                os.path.join(
-                    checkpointPath,
-                    "learner_group",
-                    "learner",
-                    "rl_module",
-                    DEFAULT_MODULE_ID,
-                )
-            )
-            manualRun(mazeSize, module, env, environmentConfig)
+                agent.save(checkpointPath)
+                # module = RLModule.from_checkpoint(
+                #     os.path.join(
+                #         checkpointPath,
+                #         "learner_group",
+                #         "learner",
+                #         "rl_module",
+                #         DEFAULT_MODULE_ID,
+                #     )
+                # )
+                # manualRun(mazeSize, module, env, environmentConfig)

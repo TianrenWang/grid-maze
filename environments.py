@@ -90,22 +90,6 @@ class MazeEnv(gym.Env):
                 goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._goalLocation = goalLocation
 
-        if self._debugging:
-            self._mazeTracker = []
-            for i in range(self._mazeSize):
-                currentRow = []
-                self._mazeTracker.append(currentRow)
-                for j in range(self._mazeSize):
-                    originalValue = self._mazeArray[i][j]
-                    if not originalValue:
-                        currentRow.append("X")
-                    elif originalValue == 1:
-                        currentRow.append(0)
-                    else:
-                        currentRow.append(originalValue)
-            self._mazeTracker[self._mazeSize // 2][self._mazeSize // 2] = "S"
-            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
-
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
@@ -121,6 +105,23 @@ class MazeEnv(gym.Env):
         else:
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
+
+        if self._debugging:
+            self._mazeTracker = []
+            for i in range(self._mazeSize):
+                currentRow = []
+                self._mazeTracker.append(currentRow)
+                for j in range(self._mazeSize):
+                    originalValue = self._mazeArray[i][j]
+                    if not originalValue:
+                        currentRow.append("X")
+                    elif originalValue == 1:
+                        currentRow.append(0)
+                    else:
+                        currentRow.append(originalValue)
+            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
+            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
+
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
         probLimit = self._gateCloseRate * 2

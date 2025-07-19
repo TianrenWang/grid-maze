@@ -200,7 +200,7 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         visionAndGridFeatures = self.memoryEncoder(visionAndGridFeatures)
         return (
-            self.trajectoryMemory(visionFeatures, initialHidden)[0],
+            self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
             projectedPlace,
             finalGridState,
         )

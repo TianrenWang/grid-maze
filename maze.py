@@ -64,5 +64,5 @@ def print_maze(maze):
 
 
 if __name__ == "__main__":
-    maze = generateMaze(30)
+    maze = generateMaze(20)
     print_maze(maze)

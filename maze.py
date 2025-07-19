@@ -41,8 +41,8 @@ def generateMaze(size: int, p_obstacle: float = 0.02):
     for i in range(size):
         for j in range(size):
             if random.random() < p_obstacle:
-                obstacleHeight = random.randint(1, 5)
-                obstacleWidth = random.randint(1, 5)
+                obstacleHeight = random.randint(1, 4)
+                obstacleWidth = random.randint(1, 4)
                 if (
                     i <= size // 2 < i + obstacleHeight
                     and j <= size // 2 < j + obstacleWidth

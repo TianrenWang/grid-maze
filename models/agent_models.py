@@ -179,14 +179,27 @@ class PlaceMazeModule(MemoryMazeModule):
         action = obs[:, :, -5:]
         return vision, lastAgentLocation, agentLocation, action
 
-    def _processPreHeads(self, batch):
+    def _processPreHeads(self, batch, eval: bool = False):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
-        initialStates = self.placeEncoder(
-            self._calculatePlace(lastAgentLocation)[:, 0, :]
-        )
-        hiddenGrid = initialStates[:, : self.integratorSize].contiguous()
-        candidateGrid = initialStates[:, self.integratorSize :].contiguous()
+        prevPlaces = self.placeEncoder(self._calculatePlace(lastAgentLocation)[:, 0, :])
+        hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
+        candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
+        if eval:
+            hiddenPlace = hiddenGrid
+            candidatePlace = candidateGrid
+            hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
+            candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
+            initialPlaceMask = torch.sum(hiddenGrid, 1) == 0
+            randomPlaceMask = (
+                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0.05
+            )
+            placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
+                :, None
+            ]
+            print(placeMask)
+            hiddenGrid = torch.where(placeMask, hiddenPlace, hiddenGrid)
+            candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
         gridStates, finalGridState = self.pathIntegrator(
             action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )
@@ -204,6 +217,19 @@ class PlaceMazeModule(MemoryMazeModule):
             projectedPlace,
             finalGridState,
         )
+
+    def _forward_exploration(self, batch, **kwargs):
+        hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
+        policy = self.policy_branch(hiddenStates)
+        return {
+            Columns.ACTION_DIST_INPUTS: policy,
+            Columns.STATE_OUT: {
+                "hiddenObs": hiddenStates[:, -1],
+                "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid[0].squeeze(0),
+            },
+            Columns.EMBEDDINGS: hiddenStates,
+        }
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):

@@ -122,7 +122,9 @@ class MazeEnv(gym.Env):
                         currentRow.append(originalValue)
             self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
             self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
-            self._shortestDistance = self.getShortestDistance()
+            self._shortestDistance = np.sum(
+                np.abs(self._agentLocation - self._goalLocation)
+            )
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)

@@ -21,6 +21,7 @@ class MazeEnv(gym.Env):
         self._actionTaken = 4
         self._debugging = config["debugging"]
         self._mazeTracker = []
+        self._shortestDistance = 0
 
         self._map = None
         self._agentLocation = (
@@ -53,8 +54,8 @@ class MazeEnv(gym.Env):
         queue = deque([(1, 1, 0)])
 
         visited = set()
-        visited.add((0, 0))
-        maze = self._map[:, :, 0].squeeze().tolist()
+        visited.add((self._agentLocation[0], self._agentLocation[1]))
+        maze = self._mazeArray
 
         while queue:
             r, c, dist = queue.popleft()
@@ -121,6 +122,7 @@ class MazeEnv(gym.Env):
                         currentRow.append(originalValue)
             self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
             self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
+            self._shortestDistance = self.getShortestDistance()
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
@@ -180,6 +182,7 @@ class MazeEnv(gym.Env):
                     self._mazeTracker[i][j] = " "
         print_maze(self._mazeTracker)
         print("Steps:", self._episode_len)
+        print("Shortest:", self._shortestDistance)
 
 
 class FoggedMazeEnv(MazeEnv):

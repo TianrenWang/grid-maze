@@ -197,7 +197,6 @@ class PlaceMazeModule(MemoryMazeModule):
             placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
                 :, None
             ]
-            print(placeMask)
             hiddenGrid = torch.where(placeMask, hiddenPlace, hiddenGrid)
             candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
         gridStates, finalGridState = self.pathIntegrator(

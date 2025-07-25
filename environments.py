@@ -323,17 +323,3 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         stepOutput = super().step(action)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
         return stepOutput
-
-    def _getObs(self):
-        vision = super()._getObs()
-        actionOneHot = np.zeros(5)
-        actionOneHot[self._actionTaken] = 1
-        return np.concatenate(
-            [
-                vision[: (self._visualRange * 2 + 1) ** 2 * 3],
-                self._lastLocation / (self._mazeSize - 1),
-                self._agentLocation / (self._mazeSize - 1),
-                actionOneHot,
-            ],
-            dtype=np.float32,
-        )

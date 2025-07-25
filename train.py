@@ -116,7 +116,6 @@ if __name__ == "__main__":
         )
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .evaluation(
-            evaluation_interval=args.evalInterval,
             evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
             evaluation_duration=1 if args.debug else 128,
@@ -145,7 +144,7 @@ if __name__ == "__main__":
     else:
         for i in range(args.numLearn):
             result = agent.train()
-            if "evaluation" in result and i % args.evalInterval == 0:
+            if i % args.evalInterval == 0:
                 if usesGrid():
                     predictionError = np.round(
                         result["learners"]["default_policy"]["prediction_error"], 2
@@ -155,12 +154,15 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["place_bias"], 2
                     )
                     print("Place Bias:", placeBias)
-                returnMean = np.round(
-                    result["evaluation"]["env_runners"]["episode_return_mean"], 2
-                )
+                totalReturn = 0
+                numSamples = 10
+                for j in range(numSamples):
+                    totalReturn += agent.evaluate()["env_runners"][
+                        "agent_episode_returns_mean"
+                    ]["default_agent"]
                 print(
                     f"Iteration {i + 1}:",
-                    returnMean,
+                    round(totalReturn / numSamples, 2),
                     " - ",
                     str(datetime.now())[:-7],
                 )

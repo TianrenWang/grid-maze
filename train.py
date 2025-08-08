@@ -150,6 +150,10 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["prediction_error"], 2
                     )
                     print("Prediction Error:", predictionError)
+                    positionError = np.round(
+                        result["learners"]["default_policy"]["position_error"], 2
+                    )
+                    print("Position Error:", positionError)
                     placeBias = np.round(
                         result["learners"]["default_policy"]["place_bias"], 2
                     )

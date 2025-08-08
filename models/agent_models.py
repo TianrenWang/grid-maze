@@ -245,6 +245,9 @@ class PlaceMazeModule(MemoryMazeModule):
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": projectedPlace,
             "placeTarget": self._calculatePlace(agentLocation),
+            "placeCells": self.placeCells.unsqueeze(0)
+            .unsqueeze(0)
+            .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),
         }
 
     @override(ValueFunctionAPI)

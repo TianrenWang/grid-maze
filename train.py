@@ -6,13 +6,11 @@ import argparse
 
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule  # noqa: F401
-from ray.rllib.core import DEFAULT_MODULE_ID  # noqa: F401
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
 from maze import generateMaze, print_maze
 from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
-from test import manualRun  # noqa: F401
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -22,7 +20,7 @@ def str2bool(v):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=31)
+parser.add_argument("--mazeSize", type=int, default=20)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--randomMaze", type=str2bool, default=True)
 parser.add_argument("--hiddenSize", type=int, default=32)
@@ -32,7 +30,7 @@ parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=4000)
 parser.add_argument("--evalInterval", type=int, default=100)
-parser.add_argument("--fixedStart", type=str2bool, default=True)
+parser.add_argument("--fixedStart", type=str2bool, default=False)
 parser.add_argument("--fogged", type=str2bool, default=True)
 parser.add_argument("--grid", type=str2bool, default=False)
 parser.add_argument("--selfLocalize", type=str2bool, default=False)
@@ -49,7 +47,7 @@ def usesGrid():
 if __name__ == "__main__":
     mazeSize = args.mazeSize
     mazeDimension = (mazeSize, mazeSize)
-    goalLocation = (mazeSize - 2, mazeSize - 2)
+    goalLocation = (mazeSize // 2, mazeSize // 2)
     mazeName = args.mazeName
     mazesPath = "mazes"
     visionRange = 4
@@ -87,7 +85,7 @@ if __name__ == "__main__":
 
     environmentConfig = {
         "maze": None if args.randomMaze else maze,
-        "goal": None,
+        "goal": None if args.fixedStart else goalLocation,
         "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
@@ -171,13 +169,3 @@ if __name__ == "__main__":
                     str(datetime.now())[:-7],
                 )
                 agent.save(checkpointPath)
-                # module = RLModule.from_checkpoint(
-                #     os.path.join(
-                #         checkpointPath,
-                #         "learner_group",
-                #         "learner",
-                #         "rl_module",
-                #         DEFAULT_MODULE_ID,
-                #     )
-                # )
-                # manualRun(mazeSize, module, env, environmentConfig)

@@ -265,9 +265,10 @@ class PlaceMazeEnv(FoggedMazeEnv):
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        output = super().reset(seed=seed, options=options)
+        self._lastLocation = np.array([1, 1])
+        super().reset(seed=seed, options=options)
         self._lastLocation = self._agentLocation
-        return output
+        return self._getObs(), self._get_info()
 
     def step(self, action):
         self._lastLocation = self._agentLocation

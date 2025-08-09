@@ -164,7 +164,7 @@ if __name__ == "__main__":
                     ]["default_agent"]
                 print(
                     f"Iteration {i + 1}:",
-                    "" if totalReturn == 0 else round(totalReturn / numSamples, 2),
+                    "" if args.selfLocalize else round(totalReturn / numSamples, 2),
                     " - ",
                     str(datetime.now())[:-7],
                 )

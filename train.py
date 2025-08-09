@@ -140,7 +140,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
-        numSamples = 10
+        numSamples = 0 if args.selfLocalize else 10
         for i in range(args.numLearn):
             result = agent.train()
             if i % args.evalInterval == 0:
@@ -164,9 +164,10 @@ if __name__ == "__main__":
                     ]["default_agent"]
                 print(
                     f"Iteration {i + 1}:",
-                    round(totalReturn / numSamples, 2),
+                    "" if totalReturn == 0 else round(totalReturn / numSamples, 2),
                     " - ",
                     str(datetime.now())[:-7],
                 )
-                numSamples = int(10 * totalReturn / numSamples) + 1
+                if not args.selfLocalize:
+                    numSamples = int(10 * totalReturn / numSamples) + 1
                 agent.save(checkpointPath)

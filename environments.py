@@ -96,9 +96,12 @@ class MazeEnv(gym.Env):
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
             agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
+            goalDiff = np.abs(agentLocation - self._goalLocation)
+            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             while (
                 np.array_equal(agentLocation, self._goalLocation)
                 or not self._mazeArray[agentLocation[0]][agentLocation[1]]
+                or (self._debugging and isCloseToGoal)
             ):
                 agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._agentLocation = agentLocation

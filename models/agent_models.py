@@ -103,11 +103,6 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
         )
-        self.trajectoryMemory = nn.GRU(
-            self.linearHiddenSize,
-            self.linearHiddenSize,
-            batch_first=True,
-        )
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01

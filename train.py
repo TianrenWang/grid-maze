@@ -140,6 +140,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
+        numSamples = 10
         for i in range(args.numLearn):
             result = agent.train()
             if i % args.evalInterval == 0:
@@ -157,7 +158,6 @@ if __name__ == "__main__":
                     )
                     print("Place Bias:", placeBias)
                 totalReturn = 0
-                numSamples = 10
                 for j in range(numSamples):
                     totalReturn += agent.evaluate()["env_runners"][
                         "agent_episode_returns_mean"
@@ -168,4 +168,5 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],
                 )
+                numSamples = int(10 * totalReturn / numSamples) + 1
                 agent.save(checkpointPath)

@@ -89,7 +89,7 @@ class MemoryMazeModule(SimpleMazeModule):
 
 class PlaceMazeModule(MemoryMazeModule):
     def setup(self):
-        SimpleMazeModule.setup(self)
+        MemoryMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
         self.numPlaceCells = self.model_config.get("numPlaceCells", 32)
         self.gridSize = 512

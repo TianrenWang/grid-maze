@@ -89,7 +89,7 @@ class MemoryMazeModule(SimpleMazeModule):
 
 class PlaceMazeModule(MemoryMazeModule):
     def setup(self):
-        SimpleMazeModule.setup(self)
+        MemoryMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)
         self.numPlaceCells = self.model_config.get("numPlaceCells", 32)
         self.gridSize = 512
@@ -102,11 +102,6 @@ class PlaceMazeModule(MemoryMazeModule):
         self.memoryEncoder = nn.Sequential(
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
-        )
-        self.trajectoryMemory = nn.GRU(
-            self.linearHiddenSize,
-            self.linearHiddenSize,
-            batch_first=True,
         )
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)

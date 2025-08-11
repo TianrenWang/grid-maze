@@ -143,6 +143,11 @@ if __name__ == "__main__":
         numSamples = 0 if args.selfLocalize else 10
         for i in range(args.numLearn):
             result = agent.train()
+            print(
+                f"Iteration {i + 1}",
+                " - ",
+                str(datetime.now())[:-7],
+            )
             if i % args.evalInterval == 0:
                 if usesGrid():
                     predictionError = np.round(
@@ -157,17 +162,16 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["place_bias"], 2
                     )
                     print("Place Bias:", placeBias)
-                totalReturn = 0
+                averageReturn = 0
+                averageSteps = 0
                 for j in range(numSamples):
-                    totalReturn += agent.evaluate()["env_runners"][
-                        "agent_episode_returns_mean"
-                    ]["default_agent"]
-                print(
-                    f"Iteration {i + 1}:",
-                    "" if args.selfLocalize else round(totalReturn / numSamples, 2),
-                    " - ",
-                    str(datetime.now())[:-7],
-                )
+                    result = agent.evaluate()["env_runners"]
+                    averageReturn += result["episode_return_mean"]
+                    averageSteps += result["episode_len_mean"]
                 if not args.selfLocalize:
-                    numSamples = int(10 * totalReturn / numSamples) + 1
+                    averageReturn = round(averageReturn / numSamples, 2)
+                    averageSteps = round(averageSteps / numSamples, 2)
+                    print("Speed:", averageSteps)
+                    print("Performance:", averageReturn)
+                    numSamples = int(10 * averageReturn / numSamples) + 1
                 agent.save(checkpointPath)

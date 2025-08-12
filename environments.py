@@ -18,6 +18,10 @@ class MazeEnv(gym.Env):
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
         self._gateCloseRate = config.get("gateCloseRate", 0)
+        self._actionTaken = 4
+        self._debugging = config["debugging"]
+        self._mazeTracker = []
+        self._shortestDistance = 0
 
         self._map = None
         self._agentLocation = (
@@ -50,8 +54,8 @@ class MazeEnv(gym.Env):
         queue = deque([(1, 1, 0)])
 
         visited = set()
-        visited.add((0, 0))
-        maze = self._map[:, :, 0].squeeze().tolist()
+        visited.add((self._agentLocation[0], self._agentLocation[1]))
+        maze = self._mazeArray
 
         while queue:
             r, c, dist = queue.popleft()
@@ -86,21 +90,52 @@ class MazeEnv(gym.Env):
             ):
                 goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
             self._goalLocation = goalLocation
+
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
-            agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
-            while (
+            allLocations = []
+            for i in range(self._mazeSize):
+                for j in range(self._mazeSize):
+                    allLocations.append((i, j))
+            np.random.shuffle(allLocations)
+            agentLocation = np.array(allLocations.pop())
+            goalDiff = np.abs(agentLocation - self._goalLocation)
+            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
+            while len(allLocations) and (
                 np.array_equal(agentLocation, self._goalLocation)
                 or not self._mazeArray[agentLocation[0]][agentLocation[1]]
+                or isCloseToGoal
             ):
-                agentLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
+                agentLocation = np.array(allLocations.pop())
+                goalDiff = np.abs(agentLocation - self._goalLocation)
+                isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             self._agentLocation = agentLocation
             agentChannel[agentLocation[0], agentLocation[1], 0] = 1
         else:
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
+
+        if self._debugging:
+            self._mazeTracker = []
+            for i in range(self._mazeSize):
+                currentRow = []
+                self._mazeTracker.append(currentRow)
+                for j in range(self._mazeSize):
+                    originalValue = self._mazeArray[i][j]
+                    if not originalValue:
+                        currentRow.append("X")
+                    elif originalValue == 1:
+                        currentRow.append(0)
+                    else:
+                        currentRow.append(originalValue)
+            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
+            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
+            self._shortestDistance = np.sum(
+                np.abs(self._agentLocation - self._goalLocation)
+            )
+
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
         probLimit = self._gateCloseRate * 2
@@ -120,28 +155,46 @@ class MazeEnv(gym.Env):
             self._maxSteps = self.getShortestDistance()
         return self._getObs(), self._get_info()
 
+    def isValidLocation(self, location: np.ndarray):
+        return (
+            0 <= location[0] < len(self._mazeArray)
+            and 0 <= location[1] < len(self._mazeArray)
+            and self._map[location[0], location[1], 0] == 1
+        )
+
     def step(self, action):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
-        if (
-            0 <= newLoc[0] < len(self._mazeArray)
-            and 0 <= newLoc[1] < len(self._mazeArray)
-            and self._map[newLoc[0], newLoc[1], 0] == 1
-        ):
+        if self.isValidLocation(newLoc):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
+            self._actionTaken = action
+        else:
+            self._actionTaken = 4
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
         reward = 1 if terminated else 0
+        if self._debugging:
+            agentLocationValue = self._mazeTracker[self._agentLocation[0]][
+                self._agentLocation[1]
+            ]
+            if isinstance(agentLocationValue, int) and agentLocationValue < 9:
+                self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] += 1
+            if terminated or truncated:
+                self.render()
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
-        mazeClone = [[item for item in row] for row in self._mazeArray]
-        mazeClone[self._agentLocation[0]][self._agentLocation[1]] = 3
-        print_maze(mazeClone)
+        for i in range(self._mazeSize):
+            for j in range(self._mazeSize):
+                if not self._mazeTracker[i][j]:
+                    self._mazeTracker[i][j] = " "
+        print_maze(self._mazeTracker)
+        print("Steps:", self._episode_len)
+        print("Shortest:", self._shortestDistance)
 
 
 class FoggedMazeEnv(MazeEnv):
@@ -210,3 +263,74 @@ class FoggedMazeEnv(MazeEnv):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self._memory = None
         return super().reset(seed=seed)
+
+
+class PlaceMazeEnv(FoggedMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self._lastLocation = self._agentLocation
+        self.observation_space = gym.spaces.Box(
+            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+        )
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self._lastLocation = np.array([1, 1])
+        super().reset(seed=seed, options=options)
+        self._lastLocation = self._agentLocation
+        return self._getObs(), self._get_info()
+
+    def step(self, action):
+        self._lastLocation = self._agentLocation
+        return super().step(action)
+
+    def _getObs(self):
+        vision = super()._getObs()
+        actionOneHot = np.zeros(5)
+        actionOneHot[self._actionTaken] = 1
+        return np.concatenate(
+            [
+                vision.flatten(),
+                self._lastLocation / (self._mazeSize - 1),
+                self._agentLocation / (self._mazeSize - 1),
+                actionOneHot,
+            ],
+            dtype=np.float32,
+        )
+
+
+class SelfLocalizeEnv(PlaceMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self._lastLocation = self._agentLocation
+        self._lastAction = np.random.randint(0, 4)
+        self._visitCounts = [
+            [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
+        ]
+        self.observation_space = gym.spaces.Box(
+            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+        )
+
+    def step(self, action):
+        finalized = False
+        availableActions = [0, 1, 2, 3]
+        while not finalized:
+            availableActions.remove(action)
+            if len(availableActions):
+                action = np.random.choice(availableActions, 1)[0]
+            else:
+                finalized = True
+            direction = self._action_to_direction[action]
+            newLoc = self._agentLocation + direction
+            if (
+                self.isValidLocation(newLoc)
+                and self._visitCounts[newLoc[0]][newLoc[1]] < 3
+            ):
+                finalized = True
+
+        self._lastLocation = self._agentLocation
+        self._lastAction = action
+        stepOutput = super().step(action)
+        self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
+        return stepOutput

@@ -6,13 +6,12 @@ import argparse
 
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec, RLModule
-from ray.rllib.core import DEFAULT_MODULE_ID
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
 from maze import generateMaze, print_maze
-from environments import MazeEnv, FoggedMazeEnv
-from test import manualRun
+from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
 
@@ -29,20 +28,26 @@ parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=1000)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
-parser.add_argument("--numLearn", type=int, default=2000)
+parser.add_argument("--numLearn", type=int, default=4000)
 parser.add_argument("--evalInterval", type=int, default=100)
-parser.add_argument("--fixedStart", type=str2bool, default=True)
+parser.add_argument("--fixedStart", type=str2bool, default=False)
 parser.add_argument("--fogged", type=str2bool, default=True)
-parser.add_argument("--placeCells", type=str2bool, default=False)
-parser.add_argument("--memoryLen", type=int, default=10)
+parser.add_argument("--grid", type=str2bool, default=False)
+parser.add_argument("--selfLocalize", type=str2bool, default=False)
+parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--gateCloseRate", type=float, default=0)
+parser.add_argument("--debug", type=str2bool, default=False)
 args = parser.parse_args()
+
+
+def usesGrid():
+    return args.grid or args.selfLocalize
 
 
 if __name__ == "__main__":
     mazeSize = args.mazeSize
     mazeDimension = (mazeSize, mazeSize)
-    goalLocation = (mazeSize - 2, mazeSize - 2)
+    goalLocation = (mazeSize // 2, mazeSize // 2)
     mazeName = args.mazeName
     mazesPath = "mazes"
     visionRange = 4
@@ -62,22 +67,31 @@ if __name__ == "__main__":
 
         print_maze(maze)
 
-    if args.placeCells:
+    if usesGrid():
         module = models.PlaceMazeModule
     elif args.memoryLen > 1 and args.fogged:
         module = models.MemoryMazeModule
     else:
         module = models.SimpleMazeModule
 
-    env = FoggedMazeEnv if args.fogged else MazeEnv
+    if args.selfLocalize:
+        env = SelfLocalizeEnv
+    elif args.grid:
+        env = PlaceMazeEnv
+    elif args.fogged:
+        env = FoggedMazeEnv
+    else:
+        env = MazeEnv
+
     environmentConfig = {
         "maze": None if args.randomMaze else maze,
-        "goal": None,
+        "goal": None if args.fixedStart else goalLocation,
         "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
         "gateCloseRate": args.gateCloseRate,
         "mazeSize": mazeSize,
+        "debugging": args.debug,
     }
 
     agentConfig = (
@@ -93,47 +107,71 @@ if __name__ == "__main__":
                     "hiddenSize": args.hiddenSize,
                     "numLayers": args.numLayers,
                     "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
-                    "max_seq_len": 10,
+                    "max_seq_len": args.memoryLen,
+                    "mazeSize": mazeSize,
                 },
             ),
         )
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .evaluation(
-            evaluation_interval=args.evalInterval,
-            evaluation_num_env_runners=8,
+            evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=256,
+            evaluation_duration=1 if args.debug else 128,
         )
         .training(
             lr=args.lr,
             entropy_coeff=0.01,
         )
     )
+    if usesGrid():
+        config = {"localization_coeff": 0.02, "self_localize": args.selfLocalize}
+        agentConfig.training(
+            learner_class=PPOTorchLearnerWithSelfPredLoss,
+            learner_config_dict=config,
+            lr=args.lr,
+            entropy_coeff=0.01,
+        )
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
     checkpointPath = f"{os.path.abspath(os.getcwd())}/checkpoints/{args.expName}"
     if os.path.exists(checkpointPath):
         agent.restore_from_path(checkpointPath)
-    for i in range(args.numLearn):
-        result = agent.train()
-        if "evaluation" in result and i % args.evalInterval == 0:
-            returnMean = np.round(
-                result["evaluation"]["env_runners"]["episode_return_mean"], 2
-            )
-            print(
-                f"Iteration {i + 1}:",
-                returnMean,
-                " - ",
-                datetime.now(),
-            )
-            agent.save(checkpointPath)
-            module = RLModule.from_checkpoint(
-                os.path.join(
-                    checkpointPath,
-                    "learner_group",
-                    "learner",
-                    "rl_module",
-                    DEFAULT_MODULE_ID,
+    if args.debug:
+        for i in range(10):
+            agent.evaluate()
+    else:
+        numSamples = 0 if args.selfLocalize else 10
+        for i in range(args.numLearn):
+            result = agent.train()
+            if i % args.evalInterval == 0:
+                print(
+                    f"Iteration {i + 1}",
+                    " - ",
+                    str(datetime.now())[:-7],
                 )
-            )
-            manualRun(mazeSize, module, env, environmentConfig)
+                if usesGrid():
+                    predictionError = np.round(
+                        result["learners"]["default_policy"]["prediction_error"], 2
+                    )
+                    print("Prediction Error:", predictionError)
+                    positionError = np.round(
+                        result["learners"]["default_policy"]["position_error"], 2
+                    )
+                    print("Position Error:", positionError)
+                    placeBias = np.round(
+                        result["learners"]["default_policy"]["place_bias"], 2
+                    )
+                    print("Place Bias:", placeBias)
+                averageReturn = 0
+                averageSteps = 0
+                for j in range(numSamples):
+                    result = agent.evaluate()["env_runners"]
+                    averageReturn += result["episode_return_mean"]
+                    averageSteps += result["episode_len_mean"]
+                if not args.selfLocalize:
+                    averageReturn = round(averageReturn / numSamples, 2)
+                    averageSteps = round(averageSteps / numSamples, 0)
+                    print("Steps:", averageSteps)
+                    print("Performance:", averageReturn)
+                    numSamples = int(10 * averageReturn / numSamples) + 1
+                agent.save(checkpointPath)

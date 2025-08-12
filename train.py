@@ -37,6 +37,7 @@ parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--gateCloseRate", type=float, default=0)
 parser.add_argument("--debug", type=str2bool, default=False)
+parser.add_argument("--gps", type=str2bool, default=False)
 args = parser.parse_args()
 
 
@@ -69,6 +70,8 @@ if __name__ == "__main__":
 
     if usesGrid():
         module = models.PlaceMazeModule
+    elif args.gps:
+        module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
         module = models.MemoryMazeModule
     else:
@@ -76,7 +79,7 @@ if __name__ == "__main__":
 
     if args.selfLocalize:
         env = SelfLocalizeEnv
-    elif args.grid:
+    elif args.grid or args.gps:
         env = PlaceMazeEnv
     elif args.fogged:
         env = FoggedMazeEnv

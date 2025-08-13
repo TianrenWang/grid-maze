@@ -250,3 +250,29 @@ class PlaceMazeModule(MemoryMazeModule):
         if embeddings is None:
             embeddings, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)
+
+
+class GPSModule(MemoryMazeModule):
+    def setup(self):
+        MemoryMazeModule.setup(self)
+        self.trajectoryMemory = nn.GRU(
+            self.linearHiddenSize + 2, self.linearHiddenSize, batch_first=True
+        )
+
+    def _getObsFromBatch(self, batch):
+        obs = batch["obs"]
+        visionSize = self.inputSize**2 * 3
+        vision = obs[:, :, :visionSize]
+        vision = torch.reshape(
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
+        )
+        agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
+        agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
+        return vision, agentLocation
+
+    def _processPreHeads(self, batch):
+        vision, agentLocation = self._getObsFromBatch(batch)
+        visionFeatures = self._processConvolution(vision)
+        initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
+        visionAndGridFeatures = torch.concat([visionFeatures, agentLocation], dim=2)
+        return self.trajectoryMemory(visionAndGridFeatures, initialHidden)

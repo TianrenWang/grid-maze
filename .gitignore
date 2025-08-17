@@ -2,3 +2,4 @@ venv
 mazes
 __pycache__
 checkpoints
+rate_maps

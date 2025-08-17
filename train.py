@@ -35,7 +35,6 @@ parser.add_argument("--fogged", type=str2bool, default=True)
 parser.add_argument("--grid", type=str2bool, default=False)
 parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=20)
-parser.add_argument("--gateCloseRate", type=float, default=0)
 parser.add_argument("--debug", type=str2bool, default=False)
 parser.add_argument("--gps", type=str2bool, default=False)
 args = parser.parse_args()
@@ -92,7 +91,6 @@ if __name__ == "__main__":
         "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,
-        "gateCloseRate": args.gateCloseRate,
         "mazeSize": mazeSize,
         "debugging": args.debug,
     }

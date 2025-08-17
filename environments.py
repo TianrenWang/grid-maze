@@ -2,7 +2,6 @@ from typing import Optional
 from collections import deque
 import numpy as np
 import gymnasium as gym
-import random
 
 from maze import print_maze, generateMaze
 
@@ -10,16 +9,15 @@ from maze import print_maze, generateMaze
 class MazeEnv(gym.Env):
     def __init__(self, config=None):
         self._episode_len = 0
-        self._mazeArray = config["maze"]
-        self._mazeSize = config["mazeSize"]
+        self._mazeArray = config.get("maze", None)
+        self._mazeSize = config.get("mazeSize", None)
         self._randomMaze = not self._mazeArray
-        self._goalLocation = config["goal"]
-        self._fixedGoal = bool(config["goal"])
+        self._goalLocation = config.get("goal", None)
+        self._fixedGoal = bool(self._goalLocation)
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
-        self._gateCloseRate = config.get("gateCloseRate", 0)
         self._actionTaken = 4
-        self._debugging = config["debugging"]
+        self._debugging = config.get("debugging", None)
         self._mazeTracker = []
         self._shortestDistance = 0
 
@@ -138,17 +136,6 @@ class MazeEnv(gym.Env):
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
-        probLimit = self._gateCloseRate * 2
-        if probLimit < 1:
-            actualGateCloseRate = random.random() * probLimit
-        else:
-            actualGateCloseRate = random.uniform(probLimit - 1, 1)
-        gateClosed = np.random.choice(
-            [0, 1],
-            size=mazeChannel.shape,
-            p=[actualGateCloseRate, 1 - actualGateCloseRate],
-        )
-        mazeChannel = np.where(mazeChannel > 1, gateClosed, mazeChannel)
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         if not self._maxSteps:

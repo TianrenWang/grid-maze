@@ -149,7 +149,7 @@ class MazeEnv(gym.Env):
             and self._map[location[0], location[1], 0] == 1
         )
 
-    def step(self, action):
+    def updateMapAfterAction(self, action):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
         if self.isValidLocation(newLoc):
@@ -160,6 +160,8 @@ class MazeEnv(gym.Env):
         else:
             self._actionTaken = 4
 
+    def step(self, action):
+        self.updateMapAfterAction(action)
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
@@ -190,7 +192,6 @@ class FoggedMazeEnv(MazeEnv):
         self._visualRange = config.get("visualRange", 4)
         self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
-        self._memory = None
         self.observation_space = gym.spaces.MultiBinary(
             (visualObsSize, visualObsSize, 3)
         )
@@ -237,19 +238,7 @@ class FoggedMazeEnv(MazeEnv):
         #     vision[: upZeroIdx[-1], 4, :] = 0
         # if len(downZeroIdx):
         #     vision[5 + downZeroIdx[0] :, 4, :] = 0
-
-        if self._memoryLen > 1:
-            if not self._memory:
-                self._memory = [vision]
-            else:
-                self._memory.append(vision)
-            if len(self._memory) > self._memoryLen:
-                self._memory.pop(0)
         return vision
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        self._memory = None
-        return super().reset(seed=seed)
 
 
 class PlaceMazeEnv(FoggedMazeEnv):
@@ -291,7 +280,7 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         super().__init__(config)
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
-        self._lastAction = np.random.randint(0, 4)
+        self._lastAction = np.random.randint(0, 3)
         self._visitCounts = [
             [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
         ]
@@ -299,25 +288,47 @@ class SelfLocalizeEnv(PlaceMazeEnv):
             0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
         )
 
-    def step(self, action):
-        finalized = False
-        availableActions = [0, 1, 2, 3]
-        while not finalized:
-            availableActions.remove(action)
-            if len(availableActions):
-                action = np.random.choice(availableActions, 1)[0]
-            else:
-                finalized = True
-            direction = self._action_to_direction[action]
-            newLoc = self._agentLocation + direction
-            if (
-                self.isValidLocation(newLoc)
-                and self._visitCounts[newLoc[0]][newLoc[1]] < 3
-            ):
-                finalized = True
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed, options=options)
+        self._map[:, :, 0] = 1
+        if self._debugging:
+            self._mazeTracker = []
+            for i in range(self._mazeSize):
+                currentRow = []
+                self._mazeTracker.append(currentRow)
+                for j in range(self._mazeSize):
+                    originalValue = self._map[i, j, 0]
+                    if not originalValue:
+                        currentRow.append("X")
+                    elif originalValue == 1:
+                        currentRow.append(0)
+                    else:
+                        currentRow.append(originalValue)
+            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
+            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
+            self._shortestDistance = np.sum(
+                np.abs(self._agentLocation - self._goalLocation)
+            )
+        return self._getObs(), self._get_info()
 
+    def updateMapAfterAction(self, action):
         self._lastLocation = self._agentLocation
+        if np.random.rand() < 0.2:
+            action = np.random.randint(0, 3)
+        else:
+            action = self._lastAction
+        direction = self._action_to_direction[action]
+        newLoc = self._agentLocation + direction
+        if newLoc[0] == -1:
+            newLoc[0] = self._mazeSize - 1
+        if newLoc[0] == self._mazeSize:
+            newLoc[0] = 0
+        if newLoc[1] == -1:
+            newLoc[1] = self._mazeSize - 1
+        if newLoc[1] == self._mazeSize:
+            newLoc[1] = 0
+        self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
+        self._agentLocation = newLoc
+        self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
+        self._actionTaken = action
         self._lastAction = action
-        stepOutput = super().step(action)
-        self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
-        return stepOutput

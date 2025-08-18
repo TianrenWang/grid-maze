@@ -2,6 +2,7 @@ from typing import Optional
 from collections import deque
 import numpy as np
 import gymnasium as gym
+import random
 
 from maze import print_maze, generateMaze
 
@@ -267,8 +268,8 @@ class PlaceMazeEnv(FoggedMazeEnv):
         return np.concatenate(
             [
                 vision.flatten(),
-                self._lastLocation / (self._mazeSize - 1),
-                self._agentLocation / (self._mazeSize - 1),
+                self._lastLocation / self._mazeSize,
+                self._agentLocation / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,
@@ -280,7 +281,9 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         super().__init__(config)
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
-        self._lastAction = np.random.randint(0, 3)
+        self._lastAction = np.random.randint(0, self.action_space.n - 1)
+        self._secondaryAction = np.random.randint(0, self.action_space.n - 1)
+        self._secondaryProb = random.random()
         self._visitCounts = [
             [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
         ]
@@ -315,8 +318,13 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         self._lastLocation = self._agentLocation
         if np.random.rand() < 0.2:
             action = np.random.randint(0, 3)
+            self._secondaryAction = np.random.randint(0, self.action_space.n - 1)
+            self._secondaryProb = random.random()
         else:
-            action = self._lastAction
+            if random.random() < self._secondaryProb:
+                action = self._secondaryAction
+            else:
+                action = self._lastAction
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
         if newLoc[0] == -1:

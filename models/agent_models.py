@@ -103,7 +103,6 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
         )
-        self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
@@ -113,6 +112,7 @@ class PlaceMazeModule(MemoryMazeModule):
             agentLocationShape = agentLocation.shape
             agentLocation = agentLocation.flatten(0, -2)
             diff = agentLocation.unsqueeze(1) - self.placeCells.unsqueeze(0)
+            diff = (diff + 0.5) % 1.0 - 0.5
             dists_squared = torch.sum(torch.abs(diff) ** 2, dim=-1)
             unnormalized_activations = -dists_squared / (2 * self.fieldSize**2)
             normalized_activations = torch.nn.functional.softmax(

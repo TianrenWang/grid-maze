@@ -98,7 +98,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeProjector = nn.Sequential(
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
-        self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
+        self.pathIntegrator = nn.LSTM(3, self.integratorSize, batch_first=True)
         self.memoryEncoder = nn.Sequential(
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
@@ -171,29 +171,20 @@ class PlaceMazeModule(MemoryMazeModule):
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
         agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
         agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
-        action = obs[:, :, -5:]
+        action = obs[:, :, -3:]
         return vision, lastAgentLocation, agentLocation, action
 
     def _processPreHeads(self, batch, eval: bool = False):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
         prevPlaces = self.placeEncoder(self._calculatePlace(lastAgentLocation)[:, 0, :])
-        hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
-        candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
-        if eval:
-            hiddenPlace = hiddenGrid
-            candidatePlace = candidateGrid
-            hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
-            candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
-            initialPlaceMask = torch.sum(hiddenGrid, 1) == 0
-            randomPlaceMask = (
-                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0.05
-            )
-            placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
-                :, None
-            ]
-            hiddenGrid = torch.where(placeMask, hiddenPlace, hiddenGrid)
-            candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
+        hiddenPlace = prevPlaces[:, : self.integratorSize].contiguous()
+        candidatePlace = prevPlaces[:, self.integratorSize :].contiguous()
+        hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
+        candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
+        initialPlaceMask = (torch.sum(hiddenGrid, 1) == 0)[:, None]
+        hiddenGrid = torch.where(initialPlaceMask, hiddenPlace, hiddenGrid)
+        candidateGrid = torch.where(initialPlaceMask, candidatePlace, candidateGrid)
         gridStates, finalGridState = self.pathIntegrator(
             action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
         )

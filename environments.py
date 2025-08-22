@@ -16,7 +16,7 @@ class MazeEnv(gym.Env):
         self._fixedGoal = bool(self._goalLocation)
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
-        self._actionTaken = 4
+        self._actionTaken = 0
         self._debugging = config.get("debugging", None)
         self._mazeTracker = []
         self._shortestDistance = 0
@@ -156,9 +156,7 @@ class MazeEnv(gym.Env):
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
             self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
-            self._actionTaken = action
-        else:
-            self._actionTaken = 4
+        self._actionTaken = action
 
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
@@ -258,7 +256,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+            -1, self._mazeSize, (visualObsSize**2 * 3 + 4 + 3,)
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -273,14 +271,17 @@ class PlaceMazeEnv(FoggedMazeEnv):
 
     def _getObs(self):
         vision = super()._getObs()
-        actionOneHot = np.zeros(5)
-        actionOneHot[self._actionTaken] = 1
+        direction = self._action_to_direction[self._actionTaken]
+        theta = np.arctan2(direction[0], direction[1])
+        velocity = [0, np.sin(theta), np.cos(theta)]
+        if not np.array_equal(self._lastLocation, self._agentLocation):
+            velocity[0] = 1
         return np.concatenate(
             [
                 vision.flatten(),
                 self._lastLocation / (self._mazeSize - 1),
                 self._agentLocation / (self._mazeSize - 1),
-                actionOneHot,
+                np.array(velocity),
             ],
             dtype=np.float32,
         )
@@ -289,15 +290,16 @@ class PlaceMazeEnv(FoggedMazeEnv):
 class SelfLocalizeEnv(PlaceMazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
-        visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self._lastAction = np.random.randint(0, 4)
         self._visitCounts = [
             [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
         ]
-        self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
-        )
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed, options=options)
+        self._map[:, :, 0] = 1
+        return self._getObs(), self._get_info()
 
     def step(self, action):
         finalized = False

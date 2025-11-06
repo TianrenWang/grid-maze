@@ -330,7 +330,7 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            0,
+            -1,
             1,
             (
                 visualObsSize**2 * 3 + 4 + 3,
@@ -358,8 +358,9 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         speed = action[0]
         if speed < 0:
             speed = 0
-        elif speed > 0.05:
-            speed = 0.05
+        elif speed > 1:
+            speed = 1
+        speed /= 20
         newDirection = self._currentDirection + action[1] * np.pi
         posChange = np.array(
             [speed * np.cos(newDirection), speed * np.sin(newDirection)]
@@ -368,7 +369,6 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         newLocation = self._agentLocation + posChange
         if self.isValidLocation(newLocation):
             self._agentLocation = newLocation
-            self._actionTaken = action
         else:
             self._agentLocation = getBoundaryPoint(self._agentLocation, posChange)
             for i in range(2):
@@ -377,6 +377,8 @@ class ContinuousMazeEnv(FoggedMazeEnv):
                     if self._agentLocation[i] < self._mazeSize
                     else self._agentLocation[i] - 1e-8
                 )
+            speed = np.sqrt(np.sum((self._agentLocation - self._lastLocation) ** 2))
+        self._actionTaken = np.array([speed, action[1]])
 
         overlaps = getOverlap(self._agentLocation, self._mazeSize)
         self._map[:, :, 2] = np.array(overlaps)

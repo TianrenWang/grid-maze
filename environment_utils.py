@@ -9,17 +9,18 @@ def isInbetween(value: int, start: int, end: int):
 
 
 def getBoundaryPoint(startPosition: np.ndarray, posChange: np.ndarray):
+    nudge = 1e-8
     m = posChange[1] / posChange[0]
     b = startPosition[1] - m * startPosition[0]
     if posChange[0] > 0:
-        verticalBoundary = np.ceil(startPosition[0])
+        verticalBoundary = np.ceil(startPosition[0]) - nudge
     else:
-        verticalBoundary = np.floor(startPosition[0])
+        verticalBoundary = np.floor(startPosition[0]) + nudge
 
     if posChange[1] > 0:
-        horizontalBoundary = np.ceil(startPosition[1])
+        horizontalBoundary = np.ceil(startPosition[1]) - nudge
     else:
-        horizontalBoundary = np.floor(startPosition[1])
+        horizontalBoundary = np.floor(startPosition[1]) + nudge
 
     horizontalIntersection = (horizontalBoundary - b) / m
     verticalIntersection = verticalBoundary * m + b

@@ -285,11 +285,13 @@ class VectorPredictor(nn.Module):
         super().__init__()
         self.speedPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Sigmoid())
         self.rotationPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Tanh())
+        self.stdLogPredictor = nn.Sequential(nn.Linear(num_hidden, 2))
 
     def forward(self, logit):
         speed = self.speedPredictor(logit)
         rotation = self.rotationPredictor(logit) * 3.14
-        return torch.concat([speed, rotation], dim=2)
+        stglog = self.stdLogPredictor(logit)
+        return torch.concat([speed, rotation, stglog], dim=2)
 
 
 class ContinuousMazeModule(PlaceMazeModule):

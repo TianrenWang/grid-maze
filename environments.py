@@ -4,6 +4,7 @@ import numpy as np
 import gymnasium as gym
 
 from maze import print_maze, generateMaze
+from environment_utils import getBoundaryPoint, getOverlap
 
 
 class MazeEnv(gym.Env):
@@ -146,7 +147,7 @@ class MazeEnv(gym.Env):
         return (
             0 <= location[0] < len(self._mazeArray)
             and 0 <= location[1] < len(self._mazeArray)
-            and self._map[location[0], location[1], 0] == 1
+            and self._map[int(location[0]), int(location[1]), 0] == 1
         )
 
     def step(self, action):
@@ -205,7 +206,7 @@ class FoggedMazeEnv(MazeEnv):
             ),
             mode="constant",
         )
-        _paddedAgentLoc = self._agentLocation + np.array((4, 4))
+        _paddedAgentLoc = self._agentLocation.astype(int) + np.array((4, 4))
         vision = paddedMap[
             _paddedAgentLoc[0] - 4 : _paddedAgentLoc[0] + 5,
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
@@ -321,3 +322,92 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         stepOutput = super().step(action)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
         return stepOutput
+
+
+class ContinuousMazeEnv(FoggedMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self._lastLocation = self._agentLocation
+        self.observation_space = gym.spaces.Box(
+            0,
+            1,
+            (
+                visualObsSize**2 * 3 + 4 + 3,
+            ),  # vision vector + last location + current location + speed + sin + cos
+        )
+        self.action_space = gym.spaces.Box(-np.pi, np.pi, (2,))
+        self._currentDirection = np.random.uniform(0, 2 * np.pi)
+        self._lastDirection = self._currentDirection
+        self._actionTaken = np.array([0, 0])
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self._lastLocation = np.array([1, 1])
+        super().reset(seed=seed, options=options)
+        self._lastLocation = self._agentLocation
+        self._currentDirection = np.random.uniform(0, 2 * np.pi)
+        self._lastDirection = self._currentDirection
+        self._actionTaken = np.array([0, 0])
+        return self._getObs(), self._get_info()
+
+    def step(self, action):
+        """
+        Write this one from scratch. Write it first for when agent controls action,
+        then write one for path integration.
+        """
+        speed = action[0]
+        newDirection = self._currentDirection + action[1]
+        posChange = np.array(
+            [speed * np.cos(newDirection), speed * np.sin(newDirection)]
+        )
+        self._lastLocation = self._agentLocation
+        newLocation = self._agentLocation + posChange
+        if self.isValidLocation(newLocation):
+            self._agentLocation = newLocation
+            self._actionTaken = action
+        else:
+            self._agentLocation = getBoundaryPoint(self._agentLocation, posChange)
+            for i in range(2):
+                self._agentLocation[i] = (
+                    self._agentLocation[i]
+                    if self._agentLocation[i] < self._mazeSize
+                    else self._agentLocation[i] - 1e-8
+                )
+
+        overlaps = getOverlap(self._agentLocation, self._mazeSize)
+        self._map[:, :, 2] = np.array(overlaps)
+
+        terminated = np.array_equal(np.floor(self._agentLocation), self._goalLocation)
+        self._episode_len += 1
+        truncated = self._episode_len > self._maxSteps
+        reward = 1 if terminated else 0
+        if self._debugging:
+            agentLocationValue = self._mazeTracker[int(self._agentLocation[0])][
+                int(self._agentLocation[1])
+            ]
+            if isinstance(agentLocationValue, int) and agentLocationValue < 9:
+                self._mazeTracker[int(self._agentLocation[0])][
+                    int(self._agentLocation[1])
+                ] += 1
+            if terminated or truncated:
+                self.render()
+        return self._getObs(), reward, terminated, truncated, self._get_info()
+
+    def _getObs(self):
+        vision = super()._getObs()
+        action = np.array(
+            [
+                self._actionTaken[0],
+                np.cos(self._actionTaken[1]),
+                np.sin(self._actionTaken[1]),
+            ],
+        )
+        return np.concatenate(
+            [
+                vision.flatten(),
+                self._lastLocation / self._mazeSize,
+                self._agentLocation / self._mazeSize,
+                action,
+            ],
+            dtype=np.float32,
+        )

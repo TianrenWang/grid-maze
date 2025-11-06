@@ -24,7 +24,9 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
             ),
             nn.ReLU(),
         )
-        self.policy_branch = nn.Linear(self.linearHiddenSize, self.action_space.n)
+        self.policy_branch = nn.Linear(
+            self.linearHiddenSize, self.action_space.shape[0]
+        )
         self.value_branch = nn.Linear(self.linearHiddenSize, 1)
 
     def _forward_intermediate(self, batch):
@@ -276,3 +278,36 @@ class GPSModule(MemoryMazeModule):
         initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
         visionAndGridFeatures = torch.concat([visionFeatures, agentLocation], dim=2)
         return self.trajectoryMemory(visionAndGridFeatures, initialHidden)
+
+
+class VectorPredictor(nn.Module):
+    def __init__(self, num_hidden):
+        super().__init__()
+        self.speedPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Sigmoid())
+        self.rotationPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Tanh())
+
+    def forward(self, logit):
+        speed = self.speedPredictor(logit)
+        rotation = self.rotationPredictor(logit) * 3.14
+        return torch.concat([speed, rotation], dim=2)
+
+
+class ContinuousMazeModule(PlaceMazeModule):
+    def setup(self):
+        PlaceMazeModule.setup(self)
+        self.policy_branch = VectorPredictor(self.linearHiddenSize)
+        self.pathIntegrator = nn.LSTM(3, self.integratorSize, batch_first=True)
+
+    def _getObsFromBatch(self, batch):
+        obs = batch["obs"]
+        visionSize = self.inputSize**2 * 3
+        vision = obs[:, :, :visionSize]
+        vision = torch.reshape(
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
+        )
+        lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
+        lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
+        agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
+        agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
+        action = obs[:, :, -3:]
+        return vision, lastAgentLocation, agentLocation, action

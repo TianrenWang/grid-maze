@@ -348,6 +348,9 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         self._currentDirection = np.random.uniform(0, 2 * np.pi)
         self._lastDirection = self._currentDirection
         self._actionTaken = np.array([0, 0])
+        self._agentLocation = self._agentLocation.astype(
+            np.float32
+        ) + np.random.uniform(1e-8, 1 - 1e-8, 2)
         return self._getObs(), self._get_info()
 
     def step(self, action):

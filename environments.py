@@ -383,9 +383,6 @@ class ContinuousMazeEnv(FoggedMazeEnv):
             speed = np.sqrt(np.sum((self._agentLocation - self._lastLocation) ** 2))
         self._actionTaken = np.array([speed, action[1]])
 
-        overlaps = getOverlap(self._agentLocation, self._mazeSize)
-        self._map[:, :, 2] = np.array(overlaps)
-
         terminated = np.array_equal(np.floor(self._agentLocation), self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
@@ -403,7 +400,12 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def _getObs(self):
-        vision = super()._getObs()
+        vision = super()._getObs().astype(np.float32)
+        agentVisionLocation = np.array(
+            [coord % 1 + self._visualRange for coord in self._agentLocation]
+        )
+        overlaps = getOverlap(agentVisionLocation, self._visualRange * 2 + 1)
+        vision[:, :, 2] = overlaps
         action = np.array(
             [
                 self._actionTaken[0],

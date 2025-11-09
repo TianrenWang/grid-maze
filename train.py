@@ -150,7 +150,7 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],
                 )
-                if usesGrid():
+                if args.selfLocalize:
                     predictionError = np.round(
                         result["learners"]["default_policy"]["prediction_error"], 2
                     )

@@ -377,7 +377,7 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         elif speed > 1:
             speed = 1
         speed /= 20
-        self._currentDirection = self._currentDirection + action[1] * np.pi
+        self._currentDirection = self._currentDirection + action[1]
         posChange = np.array(
             [
                 speed * np.cos(self._currentDirection),

@@ -289,7 +289,7 @@ class VectorPredictor(nn.Module):
 
     def forward(self, logit):
         speed = self.speedPredictor(logit)
-        rotation = self.rotationPredictor(logit) * 3.14
+        rotation = self.rotationPredictor(logit)
         stglog = self.stdLogPredictor(logit)
         return torch.concat([speed, rotation, stglog], dim=2)
 

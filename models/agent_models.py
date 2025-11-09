@@ -299,13 +299,16 @@ class ContinuousMazeModule(PlaceMazeModule):
         PlaceMazeModule.setup(self)
         self.policy_branch = VectorPredictor(self.linearHiddenSize)
         self.pathIntegrator = nn.LSTM(3, self.integratorSize, batch_first=True)
+        self.visionFeatures = 4
+        self.primaryConvModule = SimpleConv(self.hiddenSize, self.visionFeatures)
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2 * 3
+        visionSize = self.inputSize**2 * self.visionFeatures
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
+            vision,
+            [*vision.shape[:2], self.inputSize, self.inputSize, self.visionFeatures],
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)

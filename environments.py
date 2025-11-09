@@ -333,13 +333,26 @@ class ContinuousMazeEnv(FoggedMazeEnv):
             -1,
             1,
             (
-                visualObsSize**2 * 3 + 4 + 3,
+                visualObsSize**2 * 4 + 2 + 2 + 3,
             ),  # vision vector + last location + current location + speed + sin + cos
         )
         self.action_space = gym.spaces.Box(-np.pi, np.pi, (2,))
         self._currentDirection = np.random.uniform(0, 2 * np.pi)
         self._lastDirection = self._currentDirection
         self._actionTaken = np.array([0, 0])
+
+    def getDirectionMask(self):
+        visionSize = self._visualRange * 2 + 1
+        x, y = np.indices((visionSize, visionSize))
+        x = x - visionSize / 2 + 0.5
+        y = y - visionSize / 2 + 0.5
+        dist = np.abs(
+            x * np.sin(self._currentDirection) - y * np.cos(self._currentDirection)
+        )
+        forward = x * np.cos(self._currentDirection) + y * np.sin(
+            self._currentDirection
+        )
+        return np.logical_and(dist <= 0.5, forward >= 0).astype(int).astype(np.float32)
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         self._lastLocation = np.array([1, 1])
@@ -404,8 +417,11 @@ class ContinuousMazeEnv(FoggedMazeEnv):
         agentVisionLocation = np.array(
             [coord % 1 + self._visualRange for coord in self._agentLocation]
         )
-        overlaps = getOverlap(agentVisionLocation, self._visualRange * 2 + 1)
+        visionSize = self._visualRange * 2 + 1
+        overlaps = getOverlap(agentVisionLocation, visionSize)
         vision[:, :, 2] = overlaps
+        vision = np.concat((vision, self.getDirectionMask()[:, :, None]), axis=2)
+
         action = np.array(
             [
                 self._actionTaken[0],

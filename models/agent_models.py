@@ -105,7 +105,7 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
-        self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
+        self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
 
     def _calculatePlace(self, agentLocation: torch.Tensor):

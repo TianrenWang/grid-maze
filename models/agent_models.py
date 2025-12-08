@@ -98,7 +98,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeProjector = nn.Sequential(
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
-        self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
+        self.pathIntegrator = nn.RNN(5, self.integratorSize, batch_first=True)
         self.memoryEncoder = nn.Sequential(
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
@@ -106,7 +106,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
-        self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
+        self.placeEncoder = nn.Linear(self.numPlaceCells, self.integratorSize)
 
     def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():
@@ -156,7 +156,7 @@ class PlaceMazeModule(MemoryMazeModule):
     def get_initial_state(self):
         return {
             "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            # "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
             "hiddenGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
         }
 
@@ -179,12 +179,12 @@ class PlaceMazeModule(MemoryMazeModule):
         visionFeatures = self._processConvolution(vision)
         prevPlaces = self.placeEncoder(self._calculatePlace(lastAgentLocation)[:, 0, :])
         hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
-        candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
+        # candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
         if eval:
             hiddenPlace = hiddenGrid
-            candidatePlace = candidateGrid
+            # candidatePlace = candidateGrid
             hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
-            candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
+            # candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
             initialPlaceMask = torch.sum(hiddenGrid, 1) == 0
             randomPlaceMask = (
                 torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0.05
@@ -193,9 +193,9 @@ class PlaceMazeModule(MemoryMazeModule):
                 :, None
             ]
             hiddenGrid = torch.where(placeMask, hiddenPlace, hiddenGrid)
-            candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
+            # candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
         gridStates, finalGridState = self.pathIntegrator(
-            action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
+            action, hiddenGrid.unsqueeze(0)
         )
         initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
         decodedGrid = self.gridDecoder(gridStates)
@@ -219,8 +219,8 @@ class PlaceMazeModule(MemoryMazeModule):
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": hiddenStates[:, -1],
-                "candidateGrid": finalGrid[1].squeeze(0),
-                "hiddenGrid": finalGrid[0].squeeze(0),
+                # "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid.squeeze(0),
             },
             Columns.EMBEDDINGS: hiddenStates,
         }
@@ -234,8 +234,8 @@ class PlaceMazeModule(MemoryMazeModule):
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": hiddenStates[:, -1],
-                "candidateGrid": finalGrid[1].squeeze(0),
-                "hiddenGrid": finalGrid[0].squeeze(0),
+                # "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid.squeeze(0),
             },
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": projectedPlace,

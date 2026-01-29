@@ -18,9 +18,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: Dict[str, Any],
         fwd_out: Dict[str, torch.Tensor],
     ):
-        placeCells = fwd_out["placeCells"][0, 0]
-        placeLogit = fwd_out["placeLogit"].flatten(0, 1)
-        placeTarget = fwd_out["placeTarget"].flatten(0, 1)
+        placeCells = fwd_out["placeCells"].flatten(0, 2)
+        placeLogit = fwd_out["placeLogit"].flatten(0, 2)
+        placeTarget = fwd_out["placeTarget"].flatten(0, 2)
         numCells = placeLogit[0].shape[0]
         maskTensor = torch.tensor([[1 / numCells] * numCells], device=placeLogit.device)
         maskIndices = batch["loss_mask"].to(torch.int16).flatten() == 0

@@ -16,11 +16,12 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         self.inputSize = self.model_config.get("inputSize", 13)
         self.linearHiddenSize = self.hiddenSize * 8
         self.primaryConvModule = SimpleConv(self.hiddenSize)
-        primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
+        self.primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
             nn.Linear(
-                primaryConvModuleOutSize**2 * self.hiddenSize * 2, self.linearHiddenSize
+                self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
+                self.linearHiddenSize,
             ),
             nn.ReLU(),
         )

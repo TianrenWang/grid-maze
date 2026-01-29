@@ -10,7 +10,12 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
 from maze import generateMaze, print_maze
-from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from environments import (
+    MazeEnv,
+    FoggedMazeEnv,
+    PlaceMazeEnv,
+    MemoryMazeEnv,
+)
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -37,11 +42,12 @@ parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", type=str2bool, default=False)
 parser.add_argument("--gps", type=str2bool, default=False)
+parser.add_argument("--latentPath", type=str2bool, default=False)
 args = parser.parse_args()
 
 
 def usesGrid():
-    return args.grid or args.selfLocalize
+    return args.grid or args.selfLocalize or args.latentPath
 
 
 if __name__ == "__main__":
@@ -69,6 +75,8 @@ if __name__ == "__main__":
 
     if usesGrid():
         module = models.PlaceMazeModule
+        if args.latentPath:
+            module = models.LatentPathModule
     elif args.gps:
         module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
@@ -76,8 +84,8 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize:
-        env = SelfLocalizeEnv
+    if args.latentPath:
+        env = MemoryMazeEnv
     elif args.grid or args.gps:
         env = PlaceMazeEnv
     elif args.fogged:
@@ -141,7 +149,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
-        numSamples = 0 if args.selfLocalize else 10
+        numSamples = 10
         for i in range(args.numLearn):
             result = agent.train()
             if i % args.evalInterval == 0:
@@ -163,13 +171,13 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["place_bias"], 2
                     )
                     print("Place Bias:", placeBias)
-                averageReturn = 0
-                averageSteps = 0
-                for j in range(numSamples):
-                    result = agent.evaluate()["env_runners"]
-                    averageReturn += result["episode_return_mean"]
-                    averageSteps += result["episode_len_mean"]
                 if not args.selfLocalize:
+                    averageReturn = 0
+                    averageSteps = 0
+                    for j in range(numSamples):
+                        result = agent.evaluate()["env_runners"]
+                        averageReturn += result["episode_return_mean"]
+                        averageSteps += result["episode_len_mean"]
                     averageReturn = round(averageReturn / numSamples, 2)
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)

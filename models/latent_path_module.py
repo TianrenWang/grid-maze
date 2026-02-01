@@ -79,11 +79,12 @@ class LatentPathModule(MemoryMazeModule):
         return visionFeatures
 
     def get_place_activation(self, coordinates: torch.Tensor):
-        diff = coordinates.unsqueeze(-2) - self.placeCells.unsqueeze(0).unsqueeze(0)
+        originalShape = coordinates.shape[:-2]
+        diff = coordinates.flatten(0, -3).unsqueeze(2) - self.placeCells.unsqueeze(0)
         dist2 = (diff**2).sum(dim=-1)
         return torch.nn.functional.softmax(
             torch.exp(-dist2 / (2 * self.fieldSize**2)), dim=-1
-        )
+        ).reshape([*originalShape, NUM_MODULES, self.numPlaceCells])
 
     def _pathIntegrate(self, vision: torch.Tensor, previousVision: torch.Tensor):
         batchSize = vision.shape[0]
@@ -103,7 +104,7 @@ class LatentPathModule(MemoryMazeModule):
             .contiguous()
             .reshape([batchSize, NUM_MODULES, GRID_MODULE_DIM])
         ) % 1
-        pastPlaceCellActivations = self.get_place_activation(pastProjections).squeeze(1)
+        pastPlaceCellActivations = self.get_place_activation(pastProjections)
         encodedPlace = torch.einsum(
             "bmp,mpe->bme", pastPlaceCellActivations, self.placeEncoderWeight
         )
@@ -137,8 +138,12 @@ class LatentPathModule(MemoryMazeModule):
     def get_initial_state(self):
         return {
             "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
-            "hiddenGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "candidateGrid": torch.zeros(
+                (NUM_MODULES * self.integratorSize,), dtype=torch.float32
+            ),
+            "hiddenGrid": torch.zeros(
+                (NUM_MODULES * self.integratorSize,), dtype=torch.float32
+            ),
         }
 
     def _getObsFromBatch(self, batch):
@@ -164,23 +169,30 @@ class LatentPathModule(MemoryMazeModule):
     #         Columns.EMBEDDINGS: hiddenStates,
     #     }
 
-    def _getPolicyInput(self, features, gridCode):
+    def _getPolicyInput(self, features, gridCode, initialHidden):
         with torch.no_grad():
             gridWithoutGrad = torch.Tensor(gridCode).flatten(2, 3)
         encodedMemory = self.memoryEncoder(
             torch.concat([features, gridWithoutGrad], dim=2)
         )
-        encodedMemory = self.trajectoryMemory(encodedMemory)
+        encodedMemory = self.trajectoryMemory(encodedMemory, initialHidden)
         return encodedMemory[0]
 
-    @override(TorchRLModule)
-    def _forward(self, batch, **kwargs):
+    def _processPreHeads(self, batch):
         vision, previousVision = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
         gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
             vision, previousVision
         )
-        hiddenStates = self._getPolicyInput(visionFeatures, gridCode)
+        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
+        hiddenStates = self._getPolicyInput(visionFeatures, gridCode, initialHidden)
+        return hiddenStates, predictedPlaces, actualPlaces, finalGrid
+
+    @override(TorchRLModule)
+    def _forward(self, batch, **kwargs):
+        hiddenStates, predictedPlaces, actualPlaces, finalGrid = self._processPreHeads(
+            batch
+        )
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -192,13 +204,10 @@ class LatentPathModule(MemoryMazeModule):
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": predictedPlaces,
             "placeTarget": actualPlaces,
-            "placeCells": self.placeCells.unsqueeze(0)
-            .unsqueeze(0)
-            .expand([*predictedPlaces.shape[:2], NUM_MODULES, self.numPlaceCells, 2]),
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)

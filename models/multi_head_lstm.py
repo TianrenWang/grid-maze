@@ -53,7 +53,7 @@ class MultiHeadLSTM(nn.Module):
                     candidate[:, i].contiguous().unsqueeze(0),
                 ),
             )
-            seq_outputs.append(seq_hiddens.unsqueeze(1))
+            seq_outputs.append(seq_hiddens.unsqueeze(2))
             final_hiddens.append(final_hidden[0])
             final_candidates.append(final_hidden[1])
         return torch.concat(seq_outputs, dim=2), (

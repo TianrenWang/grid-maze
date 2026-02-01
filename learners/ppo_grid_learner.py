@@ -18,21 +18,46 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: Dict[str, Any],
         fwd_out: Dict[str, torch.Tensor],
     ):
-        placeCells = fwd_out["placeCells"].flatten(0, 2)
-        placeLogit = fwd_out["placeLogit"].flatten(0, 2)
-        placeTarget = fwd_out["placeTarget"].flatten(0, 2)
-        numCells = placeLogit[0].shape[0]
-        maskTensor = torch.tensor([[1 / numCells] * numCells], device=placeLogit.device)
-        maskIndices = batch["loss_mask"].to(torch.int16).flatten() == 0
-        placeLogit[maskIndices] = maskTensor
-        placeTarget[maskIndices] = maskTensor
+        parameters = self.module[module_id].named_parameters()
+        orthonormalLoss = 0
+        placeCells = None
+        for name, weight in parameters:
+            if name == "moduleProjector.weight":
+                P = weight
+                M = P.shape[0] // 2
+                P_blocks = P.view(M, 2, -1)
+                G = torch.einsum("mid,njd->mnij", P_blocks, P_blocks)
+                G_sq = G.pow(2).sum(dim=(2, 3))
+                orthogonalityLoss = G_sq.triu(diagonal=1).sum()
+                orthonormalLoss += orthogonalityLoss / (M * (M - 1) / 2)
+
+                identityMatrix = torch.eye(2, device=P.device)
+                norm_loss = 0
+                for i in range(M):
+                    Pi = P[2 * i : 2 * i + 2]
+                    norm_loss += (Pi @ Pi.T - identityMatrix).pow(2).sum()
+                orthonormalLoss += norm_loss / M
+            if name == "placeCells":
+                placeCells = weight
+
+        lossMask = batch["loss_mask"]
+        placeLogit = fwd_out["placeLogit"][lossMask]
+        placeTarget = fwd_out["placeTarget"][lossMask]
         predictions = torch.nn.functional.softmax(placeLogit, 1)
         placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
-        decodedPredictedPositions = torch.matmul(predictions, placeCells)
-        decodedActualPositions = torch.matmul(placeTarget, placeCells)
+        if len(placeCells.shape) == 2:
+            decodedPredictedPositions = torch.matmul(predictions, placeCells)
+            decodedActualPositions = torch.matmul(placeTarget, placeCells)
+        else:
+            decodedPredictedPositions = torch.einsum(
+                "bmp,mpd->bmd", predictions, placeCells
+            )
+            decodedActualPositions = torch.einsum(
+                "bmp,mpd->bmd", placeTarget, placeCells
+            )
         positionError = torch.mean(
             torch.sqrt(
-                torch.sum((decodedPredictedPositions - decodedActualPositions) ** 2, 1)
+                torch.sum((decodedPredictedPositions - decodedActualPositions) ** 2, -1)
             )
         )
         self.metrics.log_value(
@@ -48,7 +73,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             fwd_out=fwd_out,
         )
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss
+            total_loss = placeLoss + orthonormalLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

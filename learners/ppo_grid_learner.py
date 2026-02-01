@@ -37,13 +37,18 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     Pi = P[2 * i : 2 * i + 2]
                     norm_loss += (Pi @ Pi.T - identityMatrix).pow(2).sum()
                 orthonormalLoss += norm_loss / M
+                self.metrics.log_value(
+                    key=(module_id, "orthonormal_loss"),
+                    value=orthonormalLoss.cpu().detach().numpy(),
+                    window=100,
+                )
             if name == "placeCells":
                 placeCells = weight
 
         lossMask = batch["loss_mask"]
         placeLogit = fwd_out["placeLogit"][lossMask]
         placeTarget = fwd_out["placeTarget"][lossMask]
-        predictions = torch.nn.functional.softmax(placeLogit, 1)
+        predictions = torch.nn.functional.softmax(placeLogit, -1)
         placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
         if len(placeCells.shape) == 2:
             decodedPredictedPositions = torch.matmul(predictions, placeCells)
@@ -65,7 +70,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             value=positionError.cpu().detach().numpy(),
             window=100,
         )
-        predictionError = torch.mean(torch.sum(torch.abs(predictions - placeTarget), 1))
+        predictionError = torch.mean(
+            torch.sum(torch.abs(predictions - placeTarget), -1)
+        )
         total_loss = super().compute_loss_for_module(
             module_id=module_id,
             config=config,
@@ -79,11 +86,11 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             value=predictionError.cpu().detach().numpy(),
             window=100,
         )
-        targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)
-        placeBias = torch.max(targetCounts) - torch.min(targetCounts)
-        self.metrics.log_value(
-            key=(module_id, "place_bias"),
-            value=placeBias.cpu().detach().numpy(),
-            window=100,
-        )
+        # targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)
+        # placeBias = torch.max(targetCounts) - torch.min(targetCounts)
+        # self.metrics.log_value(
+        #     key=(module_id, "place_bias"),
+        #     value=placeBias.cpu().detach().numpy(),
+        #     window=100,
+        # )
         return total_loss

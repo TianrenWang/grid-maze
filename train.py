@@ -167,10 +167,15 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["position_error"], 2
                     )
                     print("Position Error:", positionError)
-                    placeBias = np.round(
-                        result["learners"]["default_policy"]["place_bias"], 2
-                    )
-                    print("Place Bias:", placeBias)
+                    if args.latentPath:
+                        orthoLoss = np.round(
+                            result["learners"]["default_policy"]["orthonormal_loss"], 2
+                        )
+                        print("Orthonormal Loss:", orthoLoss)
+                    # placeBias = np.round(
+                    #     result["learners"]["default_policy"]["place_bias"], 2
+                    # )
+                    # print("Place Bias:", placeBias)
                 if not args.selfLocalize:
                     averageReturn = 0
                     averageSteps = 0

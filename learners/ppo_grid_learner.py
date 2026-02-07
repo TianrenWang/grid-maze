@@ -79,8 +79,27 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             batch=batch,
             fwd_out=fwd_out,
         )
+
+        # Action Awareness Loss
+        obs = batch["obs"]
+        action = obs[:, :, -5:][lossMask]
+        predictedActionLogit = fwd_out["predictedAction"][lossMask]
+        actionAwarenessLoss = torch.nn.functional.cross_entropy(
+            predictedActionLogit, action
+        )
+        self.metrics.log_value(
+            key=(module_id, "orthonormal_loss"),
+            value=orthonormalLoss.cpu().detach().numpy(),
+            window=100,
+        )
+        self.metrics.log_value(
+            key=(module_id, "action_awareness_loss"),
+            value=actionAwarenessLoss.cpu().detach().numpy(),
+            window=100,
+        )
+
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + orthonormalLoss
+            total_loss = placeLoss + orthonormalLoss + actionAwarenessLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

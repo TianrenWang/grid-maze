@@ -62,10 +62,11 @@ class LatentPathModule(MemoryMazeModule):
         self.placeEncoderBias = nn.Parameter(
             torch.Tensor(NUM_MODULES, self.numPlaceCells)
         )
-        self.actionPredictor = nn.Sequential(
+        self.obsPredictor = nn.Sequential(
             nn.Linear(self.gridSize * NUM_MODULES, self.gridSize),
             nn.ReLU(),
-            nn.Linear(self.gridSize, 5),
+            nn.Linear(self.gridSize, self.inputSize**2),
+            nn.Sigmoid(),
         )
         stdv = 1.0 / math.sqrt(self.integratorSize)
         for w in (
@@ -159,11 +160,11 @@ class LatentPathModule(MemoryMazeModule):
         obs = batch["obs"]
         visionSize = self.inputSize**2 * 3
         vision = obs[:, :, :visionSize]
-        previousVision = obs[:, :, visionSize:-5]
+        previousVision = obs[:, :, visionSize:]
         visionShape = [*vision.shape[:2], self.inputSize, self.inputSize, 3]
         vision = torch.reshape(vision, visionShape)
         previousVision = torch.reshape(previousVision, visionShape)
-        return vision, previousVision, obs[:, :, -5:]
+        return vision, previousVision
 
     # def _forward_exploration(self, batch, **kwargs):
     #     hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
@@ -188,25 +189,25 @@ class LatentPathModule(MemoryMazeModule):
         return encodedMemory[0]
 
     def _processPreHeads(self, batch):
-        vision, previousVision, _ = self._getObsFromBatch(batch)
+        vision, previousVision = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
         gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
             vision, previousVision
         )
         initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
         hiddenStates = self._getPolicyInput(visionFeatures, gridCode, initialHidden)
-        predictedAction = self.actionPredictor.forward(gridCode)
+        predictedObs = self.obsPredictor.forward(gridCode)
         return (
             hiddenStates,
             predictedPlaces,
             actualPlaces,
             finalGrid,
-            predictedAction,
+            predictedObs,
         )
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        hiddenStates, predictedPlaces, actualPlaces, finalGrid, predictedAction = (
+        hiddenStates, predictedPlaces, actualPlaces, finalGrid, predictedObs = (
             self._processPreHeads(batch)
         )
         policy = self.policy_branch(hiddenStates)
@@ -220,7 +221,7 @@ class LatentPathModule(MemoryMazeModule):
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": predictedPlaces,
             "placeTarget": actualPlaces,
-            "predictedAction": predictedAction,
+            "predictedObs": predictedObs,
         }
 
     @override(ValueFunctionAPI)

@@ -172,13 +172,13 @@ if __name__ == "__main__":
                             result["learners"]["default_policy"]["orthonormal_loss"], 2
                         )
                         print("Orthonormal Loss:", orthoLoss)
-                        actionLoss = np.round(
+                        visionLoss = np.round(
                             result["learners"]["default_policy"][
-                                "action_awareness_loss"
+                                "vision_reconstruction_loss"
                             ],
                             2,
                         )
-                        print("Action Loss:", actionLoss)
+                        print("Vision Loss:", visionLoss)
                     # placeBias = np.round(
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )

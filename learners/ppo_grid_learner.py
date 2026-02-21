@@ -80,12 +80,18 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             fwd_out=fwd_out,
         )
 
-        # Action Awareness Loss
-        obs = batch["obs"]
-        action = obs[:, :, -5:][lossMask]
-        predictedActionLogit = fwd_out["predictedAction"][lossMask]
-        actionAwarenessLoss = torch.nn.functional.cross_entropy(
-            predictedActionLogit, action
+        # Vision Loss
+        obs: torch.Tensor = batch["obs"]
+        module = self.module[module_id]
+        visionSize = module.inputSize**2 * 3
+        vision = (
+            obs[:, :, visionSize:][lossMask]
+            .reshape([-1, module.inputSize, module.inputSize, 3])[:, :, :, 0]
+            .flatten(1)
+        )
+        predictedObs = fwd_out["predictedObs"][lossMask]
+        visionReconstructionLoss = torch.nn.functional.binary_cross_entropy(
+            predictedObs, vision
         )
         self.metrics.log_value(
             key=(module_id, "orthonormal_loss"),
@@ -93,13 +99,13 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             window=100,
         )
         self.metrics.log_value(
-            key=(module_id, "action_awareness_loss"),
-            value=actionAwarenessLoss.cpu().detach().numpy(),
+            key=(module_id, "vision_reconstruction_loss"),
+            value=visionReconstructionLoss.cpu().detach().numpy(),
             window=100,
         )
 
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + orthonormalLoss + actionAwarenessLoss
+            total_loss = placeLoss + orthonormalLoss + visionReconstructionLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

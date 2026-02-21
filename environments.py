@@ -329,7 +329,7 @@ class MemoryMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastObs = None
         self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 * 2 + 5,)
+            0, self._mazeSize, (visualObsSize**2 * 3 * 2,)
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -344,9 +344,7 @@ class MemoryMazeEnv(FoggedMazeEnv):
     def _getObs(self):
         vision = super()._getObs()
         previousVision = self._lastObs if self._lastObs is not None else vision
-        action = np.zeros([5])
-        action[self._actionTaken] = 1
         return np.concatenate(
-            [vision.flatten(), previousVision.flatten(), action],
+            [vision.flatten(), previousVision.flatten()],
             dtype=np.float32,
         )

@@ -84,12 +84,16 @@ class LatentPathModule(MemoryMazeModule):
         return visionFeatures
 
     def get_place_activation(self, coordinates: torch.Tensor):
-        originalShape = coordinates.shape[:-2]
-        diff = coordinates.flatten(0, -3).unsqueeze(2) - self.placeCells.unsqueeze(0)
-        dist2 = (diff**2).sum(dim=-1)
-        return torch.nn.functional.softmax(
-            torch.exp(-dist2 / (2 * self.fieldSize**2)), dim=-1
-        ).reshape([*originalShape, NUM_MODULES, self.numPlaceCells])
+        with torch.no_grad():
+            coordinates = coordinates - torch.floor(coordinates)
+            originalShape = coordinates.shape[:-2]
+            diff = coordinates.flatten(0, -3).unsqueeze(2) - self.placeCells.unsqueeze(
+                0
+            )
+            dist2 = (diff**2).sum(dim=-1)
+            return torch.nn.functional.softmax(
+                torch.exp(-dist2 / (2 * self.fieldSize**2)), dim=-1
+            ).reshape([*originalShape, NUM_MODULES, self.numPlaceCells])
 
     def _pathIntegrate(self, vision: torch.Tensor, previousVision: torch.Tensor):
         batchSize = vision.shape[0]
@@ -98,7 +102,7 @@ class LatentPathModule(MemoryMazeModule):
         latents = self._processConvolutionForGrid(
             torch.concat([vision.flatten(0, 1), previousVision])
         )
-        modularProjections = self.moduleProjector.forward(latents) % 1
+        modularProjections = self.moduleProjector.forward(latents)
         currentProjections = (
             modularProjections[:-batchSize]
             .contiguous()
@@ -108,7 +112,7 @@ class LatentPathModule(MemoryMazeModule):
             modularProjections[-batchSize:]
             .contiguous()
             .reshape([batchSize, NUM_MODULES, GRID_MODULE_DIM])
-        ) % 1
+        )
         pastPlaceCellActivations = self.get_place_activation(pastProjections)
         encodedPlace = torch.einsum(
             "bmp,mpe->bme", pastPlaceCellActivations, self.placeEncoderWeight
@@ -184,7 +188,7 @@ class LatentPathModule(MemoryMazeModule):
         return encodedMemory[0]
 
     def _processPreHeads(self, batch):
-        vision, previousVision, action = self._getObsFromBatch(batch)
+        vision, previousVision, _ = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
         gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
             vision, previousVision

@@ -23,7 +23,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         placeCells = None
         for name, weight in parameters:
             if name == "moduleProjector.weight":
-                P = weight
+                P = torch.softmax(weight, dim=1)
                 M = P.shape[0] // 2
                 P_blocks = P.view(M, 2, -1)
                 G = torch.einsum("mid,njd->mnij", P_blocks, P_blocks)

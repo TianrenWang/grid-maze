@@ -14,6 +14,16 @@ NUM_MODULES = 2
 GRID_MODULE_DIM = 2
 
 
+class ModuleProjector(nn.Module):
+    def __init__(self, inputSize: int, outputSize: int):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(outputSize, inputSize))
+
+    def forward(self, z):
+        normalizedWeight = torch.softmax(self.weight, dim=1)
+        return torch.sigmoid(z) @ normalizedWeight.T
+
+
 class LatentPathModule(MemoryMazeModule):
     def setup(self):
         MemoryMazeModule.setup(self)
@@ -36,11 +46,10 @@ class LatentPathModule(MemoryMazeModule):
                 self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
                 self.linearHiddenSize,
             ),
-            nn.ReLU(),
         )
 
-        self.moduleProjector = nn.Linear(
-            self.linearHiddenSize, GRID_MODULE_DIM * NUM_MODULES, bias=False
+        self.moduleProjector = ModuleProjector(
+            self.linearHiddenSize, GRID_MODULE_DIM * NUM_MODULES
         )
         self.pathIntegrator = MultiHeadLSTM(
             GRID_MODULE_DIM, self.integratorSize, NUM_MODULES
@@ -86,14 +95,13 @@ class LatentPathModule(MemoryMazeModule):
 
     def get_place_activation(self, coordinates: torch.Tensor):
         with torch.no_grad():
-            coordinates = coordinates - torch.floor(coordinates)
             originalShape = coordinates.shape[:-2]
             diff = coordinates.flatten(0, -3).unsqueeze(2) - self.placeCells.unsqueeze(
                 0
             )
             dist2 = (diff**2).sum(dim=-1)
             return torch.nn.functional.softmax(
-                torch.exp(-dist2 / (2 * self.fieldSize**2)), dim=-1
+                -dist2 / (2 * self.fieldSize**2), dim=-1
             ).reshape([*originalShape, NUM_MODULES, self.numPlaceCells])
 
     def _pathIntegrate(self, vision: torch.Tensor, previousVision: torch.Tensor):

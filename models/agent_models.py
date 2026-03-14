@@ -58,7 +58,7 @@ class MemoryMazeModule(SimpleMazeModule):
     def get_initial_state(self):
         return {"h": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
 
-    def _processConvolution(self, vision):
+    def _processConvolution(self, vision) -> torch.Tensor:
         visionShape = vision.shape
         vision = vision.reshape(-1, *visionShape[2:])
         vision = vision.permute(0, 3, 1, 2).to(torch.float32)

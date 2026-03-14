@@ -83,11 +83,11 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         # Vision Loss
         obs: torch.Tensor = batch["obs"]
         module = self.module[module_id]
-        visionSize = module.inputSize**2 * 3
         vision = (
-            obs[:, :, visionSize:][lossMask]
+            obs[lossMask]
             .reshape([-1, module.inputSize, module.inputSize, 3])[:, :, :, 0]
             .flatten(1)
+            .to(torch.float32)
         )
         predictedObs = fwd_out["predictedObs"][lossMask]
         visionReconstructionLoss = torch.nn.functional.binary_cross_entropy(

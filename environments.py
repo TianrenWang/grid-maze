@@ -321,30 +321,3 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         stepOutput = super().step(action)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
         return stepOutput
-
-
-class MemoryMazeEnv(FoggedMazeEnv):
-    def __init__(self, config=None):
-        super().__init__(config)
-        visualObsSize = self._visualRange * 2 + 1
-        self._lastObs = None
-        self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 * 2,)
-        )
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        super().reset(seed=seed, options=options)
-        self._lastObs = super()._getObs()
-        return self._getObs(), self._get_info()
-
-    def step(self, action):
-        self._lastObs = super()._getObs()
-        return super().step(action)
-
-    def _getObs(self):
-        vision = super()._getObs()
-        previousVision = self._lastObs if self._lastObs is not None else vision
-        return np.concatenate(
-            [vision.flatten(), previousVision.flatten()],
-            dtype=np.float32,
-        )

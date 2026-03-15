@@ -167,7 +167,7 @@ class LatentPathModule(MemoryMazeModule):
         )
         with torch.no_grad():
             gridWithoutGrad = torch.Tensor(gridCode)
-        predictedObs = self.obsPredictor.forward(gridWithoutGrad)
+        predictedObs = self.obsPredictor.forward(gridCode)
         return (
             self.policyFeatureEncoder(gridWithoutGrad),
             predictedPlaces,

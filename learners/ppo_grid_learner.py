@@ -80,32 +80,14 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             fwd_out=fwd_out,
         )
 
-        # Vision Loss
-        obs: torch.Tensor = batch["obs"]
-        module = self.module[module_id]
-        vision = (
-            obs[lossMask]
-            .reshape([-1, module.inputSize, module.inputSize, 3])[:, :, :, 0]
-            .flatten(1)
-            .to(torch.float32)
-        )
-        predictedObs = fwd_out["predictedObs"][lossMask]
-        visionReconstructionLoss = torch.nn.functional.binary_cross_entropy(
-            predictedObs, vision
-        )
         self.metrics.log_value(
             key=(module_id, "orthonormal_loss"),
             value=orthonormalLoss.cpu().detach().numpy(),
             window=100,
         )
-        self.metrics.log_value(
-            key=(module_id, "vision_reconstruction_loss"),
-            value=visionReconstructionLoss.cpu().detach().numpy(),
-            window=100,
-        )
 
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + orthonormalLoss + visionReconstructionLoss
+            total_loss = placeLoss + orthonormalLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

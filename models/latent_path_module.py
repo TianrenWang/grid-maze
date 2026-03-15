@@ -30,9 +30,15 @@ class LatentPathModule(MemoryMazeModule):
         self.gridSize = 512
         self.numPlaceCells = 32
         self.mazeSize = self.model_config.get("mazeSize", 31)
-        self.policyFeatureEncoder = nn.Sequential(
+        self.gridCompressor = nn.Sequential(
+            nn.Linear(self.gridSize * NUM_MODULES, self.gridSize),
+            nn.ReLU(),
+            nn.Linear(self.gridSize, self.linearHiddenSize),
+            nn.ReLU(),
+        )
+        self.memoryEncoder = nn.Sequential(
             nn.Linear(
-                self.gridSize * NUM_MODULES,
+                self.linearHiddenSize * 2,
                 self.linearHiddenSize,
             ),
             nn.ReLU(),
@@ -59,13 +65,7 @@ class LatentPathModule(MemoryMazeModule):
             torch.Tensor(NUM_MODULES, self.numPlaceCells, 2 * self.integratorSize)
         )
         self.placeEncoderBias = nn.Parameter(
-            torch.Tensor(NUM_MODULES, self.numPlaceCells)
-        )
-        self.obsPredictor = nn.Sequential(
-            nn.Linear(self.gridSize * NUM_MODULES, self.gridSize),
-            nn.ReLU(),
-            nn.Linear(self.gridSize, self.inputSize**2),
-            nn.Sigmoid(),
+            torch.Tensor(NUM_MODULES, 2 * self.integratorSize)
         )
         stdv = 1.0 / math.sqrt(self.integratorSize)
         for w in (
@@ -102,7 +102,7 @@ class LatentPathModule(MemoryMazeModule):
         pastPlaceCellActivations = self.get_place_activation(pastProjections)
         encodedPlace = torch.einsum(
             "bmp,mpe->bme", pastPlaceCellActivations, self.placeEncoderWeight
-        )
+        ) + self.placeEncoderBias.unsqueeze(0)
         initialHidden = encodedPlace[:, :, : self.integratorSize].contiguous()
         initialCandidate = encodedPlace[:, :, self.integratorSize :].contiguous()
         movements = currentProjections - torch.concat(
@@ -123,7 +123,7 @@ class LatentPathModule(MemoryMazeModule):
             "btmg,mgp->btmp", gridCodes, self.placeDecoderWeight
         )
         return (
-            gridCodes.flatten(2, 3),
+            gridCodes.flatten(2),
             predictedPlaceLogit,
             self.get_place_activation(currentProjections),
             finalStates,
@@ -154,27 +154,30 @@ class LatentPathModule(MemoryMazeModule):
     #         Columns.EMBEDDINGS: hiddenStates,
     #     }
 
-    def _processPreHeads(self, batch):
-        vision = batch["obs"]
-        initialLatent = batch[Columns.STATE_IN]["hiddenObs"]
-        convLatents = self._processConvolution(vision)
-        latents, finalLatents = self.trajectoryMemory(
-            convLatents.reshape([*vision.shape[:2], self.linearHiddenSize]),
-            initialLatent.unsqueeze(0),
-        )
-        gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
-            latents, initialLatent
-        )
+    def _getPolicyInput(self, features, gridCode):
         with torch.no_grad():
             gridWithoutGrad = torch.Tensor(gridCode)
-        predictedObs = self.obsPredictor.forward(gridCode)
+        compressedGrid = self.gridCompressor.forward(gridWithoutGrad)
+        encodedMemory = self.memoryEncoder(
+            torch.concat([features, compressedGrid], dim=2)
+        )
+        return encodedMemory
+
+    def _processPreHeads(self, batch):
+        initialLatent = batch[Columns.STATE_IN]["hiddenObs"]
+        latents, finalLatents = super()._processPreHeads(batch)
+        with torch.no_grad():
+            latentsWithoutGrad = torch.Tensor(latents)
+        gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
+            latentsWithoutGrad, initialLatent
+        )
+
         return (
-            self.policyFeatureEncoder(gridWithoutGrad),
+            self._getPolicyInput(latents, gridCode),
             predictedPlaces,
             actualPlaces,
             finalGrid,
             finalLatents,
-            predictedObs,
         )
 
     @override(TorchRLModule)
@@ -185,7 +188,6 @@ class LatentPathModule(MemoryMazeModule):
             actualPlaces,
             finalGrid,
             finalLatents,
-            predictedObs,
         ) = self._processPreHeads(batch)
         policy = self.policy_branch(policyFeature)
         return {
@@ -198,11 +200,10 @@ class LatentPathModule(MemoryMazeModule):
             Columns.EMBEDDINGS: policyFeature,
             "placeLogit": predictedPlaces,
             "placeTarget": actualPlaces,
-            "predictedObs": predictedObs,
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _, _, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)

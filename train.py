@@ -171,13 +171,6 @@ if __name__ == "__main__":
                             result["learners"]["default_policy"]["orthonormal_loss"], 2
                         )
                         print("Orthonormal Loss:", orthoLoss)
-                        visionLoss = np.round(
-                            result["learners"]["default_policy"][
-                                "vision_reconstruction_loss"
-                            ],
-                            2,
-                        )
-                        print("Vision Loss:", visionLoss)
                     # placeBias = np.round(
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )

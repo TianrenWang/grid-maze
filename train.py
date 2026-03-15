@@ -14,7 +14,6 @@ from environments import (
     MazeEnv,
     FoggedMazeEnv,
     PlaceMazeEnv,
-    MemoryMazeEnv,
 )
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
@@ -85,7 +84,7 @@ if __name__ == "__main__":
         module = models.SimpleMazeModule
 
     if args.latentPath:
-        env = MemoryMazeEnv
+        env = FoggedMazeEnv
     elif args.grid or args.gps:
         env = PlaceMazeEnv
     elif args.fogged:

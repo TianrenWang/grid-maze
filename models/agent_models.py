@@ -56,9 +56,9 @@ class MemoryMazeModule(SimpleMazeModule):
 
     @override(TorchRLModule)
     def get_initial_state(self):
-        return {"h": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
+        return {"hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
 
-    def _processConvolution(self, vision):
+    def _processConvolution(self, vision) -> torch.Tensor:
         visionShape = vision.shape
         vision = vision.reshape(-1, *visionShape[2:])
         vision = vision.permute(0, 3, 1, 2).to(torch.float32)
@@ -68,7 +68,7 @@ class MemoryMazeModule(SimpleMazeModule):
         return visionFeatures
 
     def _processPreHeads(self, batch):
-        initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
+        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
         vision = batch[Columns.OBS]
         visionFeatures = self._processConvolution(vision)
         return self.trajectoryMemory(visionFeatures, initialHidden)
@@ -79,7 +79,7 @@ class MemoryMazeModule(SimpleMazeModule):
         policy = self.policy_branch(allHiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
-            Columns.STATE_OUT: {"h": finalHiddenState.squeeze(0)},
+            Columns.STATE_OUT: {"hiddenObs": finalHiddenState.squeeze(0)},
             Columns.EMBEDDINGS: allHiddenStates,
         }
 

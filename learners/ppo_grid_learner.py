@@ -23,7 +23,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         placeCells = None
         for name, weight in parameters:
             if name == "moduleProjector.weight":
-                P = weight
+                P = torch.softmax(weight, dim=1)
                 M = P.shape[0] // 2
                 P_blocks = P.view(M, 2, -1)
                 G = torch.einsum("mid,njd->mnij", P_blocks, P_blocks)
@@ -79,6 +79,13 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             batch=batch,
             fwd_out=fwd_out,
         )
+
+        self.metrics.log_value(
+            key=(module_id, "orthonormal_loss"),
+            value=orthonormalLoss.cpu().detach().numpy(),
+            window=100,
+        )
+
         if config.learner_config_dict.get("self_localize"):
             total_loss = placeLoss + orthonormalLoss
         self.metrics.log_value(

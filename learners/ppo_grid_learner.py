@@ -86,8 +86,17 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             window=100,
         )
 
+        # Reconstruction Loss
+        latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
+        reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][lossMask]
+        reconstructionLoss = torch.nn.functional.mse_loss(reconstructedLatents, latents)
+        self.metrics.log_value(
+            key=(module_id, "reconstruction_loss"),
+            value=reconstructionLoss.cpu().detach().numpy(),
+            window=100,
+        )
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + orthonormalLoss
+            total_loss = placeLoss + orthonormalLoss + reconstructionLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

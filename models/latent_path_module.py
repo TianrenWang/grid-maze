@@ -67,6 +67,11 @@ class LatentPathModule(MemoryMazeModule):
         self.placeEncoderBias = nn.Parameter(
             torch.Tensor(NUM_MODULES, 2 * self.integratorSize)
         )
+        self.latentReconstructor = nn.Sequential(
+            nn.Linear(self.gridSize * NUM_MODULES, self.gridSize),
+            nn.ReLU(),
+            nn.Linear(self.gridSize, self.linearHiddenSize),
+        )
         stdv = 1.0 / math.sqrt(self.integratorSize)
         for w in (
             self.gridProjectorWeight,
@@ -165,19 +170,20 @@ class LatentPathModule(MemoryMazeModule):
 
     def _processPreHeads(self, batch):
         initialLatent = batch[Columns.STATE_IN]["hiddenObs"]
-        latents, finalLatents = super()._processPreHeads(batch)
+        latents, _ = super()._processPreHeads(batch)
         with torch.no_grad():
             latentsWithoutGrad = torch.Tensor(latents)
         gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
             latentsWithoutGrad, initialLatent
         )
-
+        reconstructedLatent = self.latentReconstructor.forward(gridCode)
         return (
-            self._getPolicyInput(latents, gridCode),
+            self._getPolicyInput(latents, torch.nn.functional.dropout(gridCode)),
             predictedPlaces,
             actualPlaces,
             finalGrid,
-            finalLatents,
+            latents,
+            reconstructedLatent,
         )
 
     @override(TorchRLModule)
@@ -187,23 +193,26 @@ class LatentPathModule(MemoryMazeModule):
             predictedPlaces,
             actualPlaces,
             finalGrid,
-            finalLatents,
+            latents,
+            reconstructedLatent,
         ) = self._processPreHeads(batch)
         policy = self.policy_branch(policyFeature)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
-                "hiddenObs": finalLatents.squeeze(0),
+                "hiddenObs": latents[:, -1, :],
                 "candidateGrid": finalGrid[1].squeeze(0),
                 "hiddenGrid": finalGrid[0].squeeze(0),
             },
             Columns.EMBEDDINGS: policyFeature,
             "placeLogit": predictedPlaces,
             "placeTarget": actualPlaces,
+            "reconstructedLatents": reconstructedLatent,
+            "actualLatents": latents,
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)

@@ -1,5 +1,4 @@
 from typing import Optional
-from collections import deque
 import numpy as np
 import gymnasium as gym
 
@@ -46,37 +45,18 @@ class MazeEnv(gym.Env):
     def _getObs(self):
         return {"vision": self._map}
 
-    def getShortestDistance(self):
-        size = len(self._mazeArray)
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        queue = deque([(1, 1, 0)])
-
-        visited = set()
-        visited.add((self._agentLocation[0], self._agentLocation[1]))
-        maze = self._mazeArray
-
-        while queue:
-            r, c, dist = queue.popleft()
-            if (r, c) == (size - 2, size - 2):
-                return dist
-
-            for dr, dc in directions:
-                nr, nc = r + dr, c + dc
-                if (
-                    0 <= nr < size
-                    and 0 <= nc < size
-                    and maze[nr][nc] == 1
-                    and (nr, nc) not in visited
-                ):
-                    visited.add((nr, nc))
-                    queue.append((nr, nc, dist + 1))
-
-        return -1
+    def getWorstCaseTry(self, location: int, goal: int):
+        if abs(location - goal) <= 4:
+            return abs(location - goal)
+        elif location > goal:
+            return self._mazeSize - 4 - location + self._mazeSize - 4 - goal
+        else:
+            return location + goal - 8
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         if self._randomMaze:
-            self._mazeArray = generateMaze(self._mazeSize)
+            self._mazeArray = generateMaze(self._mazeSize, 0.03)
 
         mazeSize = len(self._mazeArray)
         if not self._fixedGoal:
@@ -123,16 +103,31 @@ class MazeEnv(gym.Env):
                 for j in range(self._mazeSize):
                     originalValue = self._mazeArray[i][j]
                     if not originalValue:
-                        currentRow.append("X")
+                        currentRow.append(0)
                     elif originalValue == 1:
                         currentRow.append(0)
                     else:
                         currentRow.append(originalValue)
             self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
             self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
-            self._shortestDistance = np.sum(
-                np.abs(self._agentLocation - self._goalLocation)
-            )
+            # self._shortestDistance = np.sum(
+            #     np.abs(self._agentLocation - self._goalLocation)
+            # )
+            goalDistance = np.abs(self._agentLocation - self._goalLocation)
+            if goalDistance[0] <= 4 and goalDistance[1] <= 4:
+                self._shortestDistance = np.sum(goalDistance)
+            elif goalDistance[0] <= 4:
+                self._shortestDistance = abs(
+                    self._goalLocation[0] - self._agentLocation[0]
+                ) + self.getWorstCaseTry(self._agentLocation[1], self._goalLocation[1])
+            elif goalDistance[1] <= 4:
+                self._shortestDistance = abs(
+                    self._goalLocation[1] - self._agentLocation[1]
+                ) + self.getWorstCaseTry(self._agentLocation[0], self._goalLocation[0])
+            else:
+                self._shortestDistance = self.getWorstCaseTry(
+                    self._agentLocation[1], self._goalLocation[1]
+                ) + self.getWorstCaseTry(self._agentLocation[0], self._goalLocation[0])
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
@@ -146,7 +141,7 @@ class MazeEnv(gym.Env):
         return (
             0 <= location[0] < len(self._mazeArray)
             and 0 <= location[1] < len(self._mazeArray)
-            and self._map[location[0], location[1], 0] == 1
+            # and self._map[location[0], location[1], 0] == 1
         )
 
     def step(self, action):
@@ -163,7 +158,16 @@ class MazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
-        reward = 1 if terminated else 0
+        if terminated:
+            if self._episode_len > 100:
+                reward = 0.1
+            else:
+                closenessFactor = 1 - (self._episode_len - self._shortestDistance) / (
+                    100 - self._shortestDistance
+                )
+                reward = 0.1 + closenessFactor**2
+        else:
+            reward = 0
         if self._debugging:
             agentLocationValue = self._mazeTracker[self._agentLocation[0]][
                 self._agentLocation[1]

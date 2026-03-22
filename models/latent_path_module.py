@@ -42,6 +42,7 @@ class LatentPathModule(MemoryMazeModule):
                 self.linearHiddenSize,
             ),
             nn.ReLU(),
+            nn.Dropout(),
         )
 
         self.moduleProjector = ModuleProjector(
@@ -58,7 +59,8 @@ class LatentPathModule(MemoryMazeModule):
             torch.Tensor(NUM_MODULES, self.gridSize, self.numPlaceCells)
         )
         self.placeCells = nn.Parameter(
-            torch.rand([NUM_MODULES, self.numPlaceCells, GRID_MODULE_DIM]), False
+            (torch.rand([NUM_MODULES, self.numPlaceCells, GRID_MODULE_DIM]) - 0.5) * 2,
+            False,
         )
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoderWeight = nn.Parameter(

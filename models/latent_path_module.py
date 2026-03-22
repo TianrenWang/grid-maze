@@ -20,7 +20,7 @@ class ModuleProjector(nn.Module):
 
     def forward(self, z):
         normalizedWeight = torch.softmax(self.weight, dim=1)
-        return torch.sigmoid(z) @ normalizedWeight.T
+        return z @ normalizedWeight.T
 
 
 class LatentPathModule(MemoryMazeModule):

@@ -127,7 +127,9 @@ class LatentPathModule(MemoryMazeModule):
             + self.gridProjectorBias[None, None, :, :]
         )
         predictedPlaceLogit = torch.einsum(
-            "btmg,mgp->btmp", torch.dropout(gridCodes), self.placeDecoderWeight
+            "btmg,mgp->btmp",
+            torch.nn.functional.dropout(gridCodes),
+            self.placeDecoderWeight,
         )
         return (
             gridCodes.flatten(2),

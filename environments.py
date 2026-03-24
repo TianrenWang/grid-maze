@@ -46,8 +46,8 @@ class MazeEnv(gym.Env):
         return {"vision": self._map}
 
     def getWorstCaseTry(self, location: int, goal: int):
-        if abs(location - goal) <= 4:
-            return abs(location - goal)
+        if abs(location - goal) <= 4 or location <= 4 or self._mazeSize - location <= 4:
+            return abs(goal - location)
         elif location > goal:
             return self._mazeSize - 4 - location + self._mazeSize - 4 - goal
         else:
@@ -116,14 +116,6 @@ class MazeEnv(gym.Env):
             goalDistance = np.abs(self._agentLocation - self._goalLocation)
             if goalDistance[0] <= 4 and goalDistance[1] <= 4:
                 self._shortestDistance = np.sum(goalDistance)
-            elif goalDistance[0] <= 4:
-                self._shortestDistance = abs(
-                    self._goalLocation[0] - self._agentLocation[0]
-                ) + self.getWorstCaseTry(self._agentLocation[1], self._goalLocation[1])
-            elif goalDistance[1] <= 4:
-                self._shortestDistance = abs(
-                    self._goalLocation[1] - self._agentLocation[1]
-                ) + self.getWorstCaseTry(self._agentLocation[0], self._goalLocation[0])
             else:
                 self._shortestDistance = self.getWorstCaseTry(
                     self._agentLocation[1], self._goalLocation[1]

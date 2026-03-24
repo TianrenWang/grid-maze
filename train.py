@@ -187,8 +187,8 @@ if __name__ == "__main__":
                         result = agent.evaluate()["env_runners"]
                         averageReturn += result["episode_return_mean"]
                         averageSteps += result["episode_len_mean"]
-                    # averageReturn = round(averageReturn / numSamples, 2)
-                    # print("Performance:", averageReturn)
+                    averageReturn = round(averageReturn / numSamples, 2)
+                    print("Performance:", averageReturn)
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)
                     numSamples = (

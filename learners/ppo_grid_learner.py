@@ -49,7 +49,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         placeLogit = fwd_out["placeLogit"][lossMask]
         placeTarget = fwd_out["placeTarget"][lossMask]
         predictions = torch.nn.functional.softmax(placeLogit, -1)
-        placeLoss = torch.nn.functional.cross_entropy(placeLogit, placeTarget)
+        placeLoss = torch.nn.functional.cross_entropy(
+            placeLogit.flatten(0, 1), placeTarget.flatten(0, 1)
+        )
         if len(placeCells.shape) == 2:
             decodedPredictedPositions = torch.matmul(predictions, placeCells)
             decodedActualPositions = torch.matmul(placeTarget, placeCells)

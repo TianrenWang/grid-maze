@@ -186,7 +186,7 @@ class LatentPathModule(MemoryMazeModule):
             predictedPlaces,
             actualPlaces,
             finalGrid,
-            latents,
+            latentsWithoutGrad,
             reconstructedLatent,
         )
 

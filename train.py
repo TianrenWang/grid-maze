@@ -166,16 +166,6 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["position_error"], 2
                     )
                     print("Position Error:", positionError)
-                    if args.latentPath:
-                        orthoLoss = np.round(
-                            result["learners"]["default_policy"]["orthonormal_loss"], 2
-                        )
-                        print("Orthonormal Loss:", orthoLoss)
-                        reconstructionLoss = np.round(
-                            result["learners"]["default_policy"]["reconstruction_loss"],
-                            2,
-                        )
-                        print("Reconstruction Loss:", reconstructionLoss)
                     # placeBias = np.round(
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )

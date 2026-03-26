@@ -14,13 +14,33 @@ GRID_MODULE_DIM = 2
 
 
 class ModuleProjector(nn.Module):
-    def __init__(self, inputSize: int, outputSize: int):
+    def __init__(self, latentSize: int, alpha: float):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(outputSize, inputSize))
+        self.mean = nn.Parameter(
+            torch.zeros(latentSize, dtype=torch.float32), requires_grad=False
+        )
+        self.covariance = nn.Parameter(
+            torch.zeros([latentSize, latentSize], dtype=torch.float32),
+            requires_grad=False,
+        )
+        self.alpha = alpha
 
-    def forward(self, z):
-        normalizedWeight = torch.softmax(self.weight, dim=1)
-        return z @ normalizedWeight.T
+    def update(self, latent: torch.Tensor):
+        with torch.no_grad():
+            currentMean = latent.mean(dim=0)
+            self.mean.copy_(currentMean * self.alpha + self.mean * (1 - self.alpha))
+            centered = latent - self.mean[None, :]
+            currentCovariance = centered.T @ centered / (latent.shape[0] - 1)
+            self.covariance.copy_(
+                currentCovariance * self.alpha + self.covariance * (1 - self.alpha)
+            )
+
+    def forward(self, latent: torch.Tensor):
+        eigenvalues, eigenvectors = torch.linalg.eigh(self.covariance)
+        idx = torch.argsort(eigenvalues, descending=True)
+        eigenvectors = eigenvectors[:, idx]
+        principal_components = eigenvectors[:, : NUM_MODULES * GRID_MODULE_DIM]
+        return (latent - self.mean) @ principal_components
 
 
 class LatentPathModule(MemoryMazeModule):
@@ -45,9 +65,7 @@ class LatentPathModule(MemoryMazeModule):
             nn.Dropout(),
         )
 
-        self.moduleProjector = ModuleProjector(
-            self.linearHiddenSize, GRID_MODULE_DIM * NUM_MODULES
-        )
+        self.moduleProjector = ModuleProjector(self.linearHiddenSize, 0.01)
         self.pathIntegrator = MultiHeadLSTM(
             GRID_MODULE_DIM, self.integratorSize, NUM_MODULES
         )
@@ -100,6 +118,9 @@ class LatentPathModule(MemoryMazeModule):
         latents: torch.Tensor,
         initialLatents: torch.Tensor,
     ):
+        self.moduleProjector.update(
+            torch.concat([latents.flatten(0, 1), initialLatents], dim=0)
+        )
         currentProjections = self.moduleProjector.forward(latents).reshape(
             [*latents.shape[:2], NUM_MODULES, GRID_MODULE_DIM]
         )

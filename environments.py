@@ -46,7 +46,7 @@ class MazeEnv(gym.Env):
         return {"vision": self._map}
 
     def getWorstCaseTry(self, location: int, goal: int):
-        if abs(location - goal) <= 4 or location <= 4 or self._mazeSize - location <= 4:
+        if location <= 4 or self._mazeSize - location <= 4:
             return abs(goal - location)
         elif location > goal:
             return self._mazeSize - 4 - location + self._mazeSize - 4 - goal

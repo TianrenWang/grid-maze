@@ -52,7 +52,9 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 },
             }
             rl_module_out = module.forward(batched_obs)
-            latent = rl_module_out["latents"].detach().cpu().numpy().flatten().tolist()
+            latent = (
+                rl_module_out["actualLatents"].detach().cpu().numpy().flatten().tolist()
+            )
             if env._agentLocation[0] <= 4:
                 wallEncounter.add(0)
             if env._mazeSize - env._agentLocation[0] <= 4:

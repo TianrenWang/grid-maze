@@ -19,29 +19,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         fwd_out: Dict[str, torch.Tensor],
     ):
         parameters = self.module[module_id].named_parameters()
-        orthonormalLoss = 0
         placeCells = None
         for name, weight in parameters:
-            if name == "moduleProjector.weight":
-                P = torch.softmax(weight, dim=1)
-                M = P.shape[0] // 2
-                P_blocks = P.view(M, 2, -1)
-                G = torch.einsum("mid,njd->mnij", P_blocks, P_blocks)
-                G_sq = G.pow(2).sum(dim=(2, 3))
-                orthogonalityLoss = G_sq.triu(diagonal=1).sum()
-                orthonormalLoss += orthogonalityLoss / (M * (M - 1) / 2)
-
-                identityMatrix = torch.eye(2, device=P.device)
-                norm_loss = 0
-                for i in range(M):
-                    Pi = P[2 * i : 2 * i + 2]
-                    norm_loss += (Pi @ Pi.T - identityMatrix).pow(2).sum()
-                orthonormalLoss += norm_loss / M
-                self.metrics.log_value(
-                    key=(module_id, "orthonormal_loss"),
-                    value=orthonormalLoss.cpu().detach().numpy(),
-                    window=100,
-                )
             if name == "placeCells":
                 placeCells = weight
 
@@ -82,12 +61,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             fwd_out=fwd_out,
         )
 
-        self.metrics.log_value(
-            key=(module_id, "orthonormal_loss"),
-            value=orthonormalLoss.cpu().detach().numpy(),
-            window=100,
-        )
-
         # Reconstruction Loss
         latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
         reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][lossMask]
@@ -98,7 +71,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             window=100,
         )
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + orthonormalLoss + reconstructionLoss
+            total_loss = placeLoss + reconstructionLoss
         self.metrics.log_value(
             key=(module_id, "prediction_error"),
             value=predictionError.cpu().detach().numpy(),

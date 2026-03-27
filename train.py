@@ -167,10 +167,6 @@ if __name__ == "__main__":
                     )
                     print("Position Error:", positionError)
                     if args.latentPath:
-                        orthoLoss = np.round(
-                            result["learners"]["default_policy"]["orthonormal_loss"], 2
-                        )
-                        print("Orthonormal Loss:", orthoLoss)
                         reconstructionLoss = np.round(
                             result["learners"]["default_policy"]["reconstruction_loss"],
                             2,

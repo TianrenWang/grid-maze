@@ -16,6 +16,9 @@ GRID_MODULE_DIM = 2
 class ModuleProjector(nn.Module):
     def __init__(self, latentSize: int, alpha: float):
         super().__init__()
+        self.count = self.mean = nn.Parameter(
+            torch.zeros(latentSize, dtype=torch.float32), requires_grad=False
+        )
         self.mean = nn.Parameter(
             torch.zeros(latentSize, dtype=torch.float32), requires_grad=False
         )
@@ -29,7 +32,6 @@ class ModuleProjector(nn.Module):
             ),
             requires_grad=False,
         )
-        self.alpha = alpha
 
     def update(self, latent: torch.Tensor):
         with torch.no_grad():

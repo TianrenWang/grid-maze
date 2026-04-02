@@ -33,12 +33,20 @@ class ModuleProjector(nn.Module):
 
     def update(self, latent: torch.Tensor):
         with torch.no_grad():
-            currentMean = latent.mean(dim=0)
-            self.mean.copy_(currentMean * self.alpha + self.mean * (1 - self.alpha))
-            centered = latent - self.mean[None, :]
-            currentCovariance = centered.T @ centered / (latent.shape[0] - 1)
+            m = latent.shape[0]
+            batch_mean = latent.mean(0)
+            batch_cov = torch.cov(latent.T)
+
+            delta = batch_mean - self.mean
+            self.count.copy_(self.count + m)
+            new_mean = self.mean + delta * (m / self.count)
+            delta2 = batch_mean - new_mean
+
+            self.mean.copy_(new_mean)
             self.covariance.copy_(
-                currentCovariance * self.alpha + self.covariance * (1 - self.alpha)
+                batch_cov * (m / self.count)
+                + torch.outer(delta, delta2) * (m / self.count)
+                + self.covariance
             )
             eigenvalues, eigenvectors = torch.linalg.eigh(self.covariance)
             idx = torch.argsort(eigenvalues, descending=True)

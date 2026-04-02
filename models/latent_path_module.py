@@ -14,7 +14,7 @@ GRID_MODULE_DIM = 2
 
 
 class ModuleProjector(nn.Module):
-    def __init__(self, latentSize: int, alpha: float):
+    def __init__(self, latentSize: int):
         super().__init__()
         self.count = nn.Parameter(torch.tensor(0.0), requires_grad=False)
         self.mean = nn.Parameter(
@@ -81,7 +81,7 @@ class LatentPathModule(MemoryMazeModule):
             nn.Dropout(),
         )
 
-        self.moduleProjector = ModuleProjector(self.linearHiddenSize, 0.01)
+        self.moduleProjector = ModuleProjector(self.linearHiddenSize)
         self.pathIntegrator = MultiHeadLSTM(
             GRID_MODULE_DIM, self.integratorSize, NUM_MODULES
         )

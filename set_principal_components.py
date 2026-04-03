@@ -63,7 +63,7 @@ def setPrincipalComponents(mazeSize: int, modulePath: str, expName: str):
         episodes += 1
 
     samples = torch.concat(latents, dim=0)
-    module.moduleProjector.update(samples)
+    module.moduleProjector.setup(samples)
     module.save_to_path(modulePath)
 
 

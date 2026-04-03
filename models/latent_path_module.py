@@ -29,7 +29,7 @@ class ModuleProjector(nn.Module):
             requires_grad=False,
         )
 
-    def update(self, latent: torch.Tensor):
+    def setup(self, latent: torch.Tensor):
         with torch.no_grad():
             self.center.copy_(torch.mean(latent, dim=0))
             covariance = torch.cov((latent - self.center[None, :]).T)
@@ -39,11 +39,8 @@ class ModuleProjector(nn.Module):
             principalComponents = eigenvectors[:, : NUM_MODULES * 2]
             self.principalComponents.copy_(principalComponents)
             PCcoordinates = (latent - self.center[None, :]) @ principalComponents
-            moduleMax = torch.max(
-                torch.max(torch.abs(PCcoordinates).T, dim=1)[0].reshape(NUM_MODULES, 2),
-                dim=1,
-            )[0]
-            self.moduleScales.copy_(moduleMax)
+            stdPerModule = torch.std(PCcoordinates.T.reshape([NUM_MODULES, -1]), dim=1)
+            self.moduleScales.copy_(stdPerModule * 2)
 
     def forward(self, latent: torch.Tensor):
         unnormalizedPCA = (

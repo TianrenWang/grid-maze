@@ -16,13 +16,11 @@ GRID_MODULE_DIM = 2
 class ModuleProjector(nn.Module):
     def __init__(self, latentSize: int):
         super().__init__()
-        self.count = nn.Parameter(torch.tensor(0.0), requires_grad=False)
-        self.mean = nn.Parameter(
+        self.center = nn.Parameter(
             torch.zeros(latentSize, dtype=torch.float32), requires_grad=False
         )
-        self.covariance = nn.Parameter(
-            torch.zeros([latentSize, latentSize], dtype=torch.float32),
-            requires_grad=False,
+        self.moduleScales = nn.Parameter(
+            torch.ones([NUM_MODULES], dtype=torch.float32), requires_grad=False
         )
         self.principalComponents = nn.Parameter(
             torch.zeros(
@@ -33,30 +31,31 @@ class ModuleProjector(nn.Module):
 
     def update(self, latent: torch.Tensor):
         with torch.no_grad():
-            m = latent.shape[0]
-            batch_mean = latent.mean(0)
-            batch_cov = torch.cov(latent.T)
-
-            delta = batch_mean - self.mean
-            self.count.copy_(self.count + m)
-            new_mean = self.mean + delta * (m / self.count)
-            delta2 = batch_mean - new_mean
-
-            self.mean.copy_(new_mean)
-            self.covariance.copy_(
-                batch_cov * (m / self.count)
-                + torch.outer(delta, delta2) * (m / self.count)
-                + self.covariance
-            )
-            eigenvalues, eigenvectors = torch.linalg.eigh(self.covariance)
+            self.center.copy_(torch.mean(latent, dim=0))
+            covariance = torch.cov((latent - self.center[None, :]).T)
+            eigenvalues, eigenvectors = torch.linalg.eigh(covariance)
             idx = torch.argsort(eigenvalues, descending=True)
             eigenvectors = eigenvectors[:, idx]
-            self.principalComponents.copy_(
-                eigenvectors[:, : NUM_MODULES * GRID_MODULE_DIM]
-            )
+            principalComponents = eigenvectors[:, : NUM_MODULES * 2]
+            self.principalComponents.copy_(principalComponents)
+            PCcoordinates = (latent - self.center[None, :]) @ principalComponents
+            moduleMax = torch.max(
+                torch.max(torch.abs(PCcoordinates).T, dim=1)[0].reshape(NUM_MODULES, 2),
+                dim=1,
+            )[0]
+            self.moduleScales.copy_(moduleMax)
 
     def forward(self, latent: torch.Tensor):
-        return (latent - self.mean) @ self.principalComponents
+        unnormalizedPCA = (
+            latent - self.center[None, None, :]
+        ) @ self.principalComponents
+        normalizedPCA = (
+            unnormalizedPCA.reshape(
+                [*unnormalizedPCA.shape[:2], NUM_MODULES, GRID_MODULE_DIM]
+            )
+            / self.moduleScales[None, :, None]
+        )
+        return normalizedPCA
 
 
 class LatentPathModule(MemoryMazeModule):
@@ -206,10 +205,6 @@ class LatentPathModule(MemoryMazeModule):
         latents, _ = super()._processPreHeads(batch)
         with torch.no_grad():
             latentsWithoutGrad = torch.Tensor(latents)
-        if self.model_config.get("self_localize"):
-            self.moduleProjector.update(
-                torch.concat([latents[batch["loss_mask"]], initialLatent], dim=0)
-            )
         gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
             latentsWithoutGrad, initialLatent
         )

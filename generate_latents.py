@@ -35,7 +35,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     latentStates = []
     stateLabels = []
 
-    while episodes < 100:
+    while episodes < 200:
         previousState = module.get_initial_state()
         obs, _ = env.reset()
         done = False
@@ -51,7 +51,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                     k: torch.reshape(v, [1, -1]) for k, v in previousState.items()
                 },
             }
-            rl_module_out = module.forward(batched_obs)
+            rl_module_out = module.forward_exploration(batched_obs)
             latent = (
                 rl_module_out["actualLatents"].detach().cpu().numpy().flatten().tolist()
             )

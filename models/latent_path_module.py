@@ -129,7 +129,7 @@ class LatentPathModule(MemoryMazeModule):
         )
         predictedPlaceLogit = torch.einsum(
             "btmg,mgp->btmp",
-            torch.nn.functional.dropout(gridCodes),
+            torch.nn.functional.dropout(gridCodes, training=self.training),
             self.placeDecoderWeight,
         )
         return (
@@ -152,18 +152,19 @@ class LatentPathModule(MemoryMazeModule):
             ),
         }
 
-    # def _forward_exploration(self, batch, **kwargs):
-    #     hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
-    #     policy = self.policy_branch(hiddenStates)
-    #     return {
-    #         Columns.ACTION_DIST_INPUTS: policy,
-    #         Columns.STATE_OUT: {
-    #             "hiddenObs": hiddenStates[:, -1],
-    #             "candidateGrid": finalGrid[1].squeeze(0),
-    #             "hiddenGrid": finalGrid[0].squeeze(0),
-    #         },
-    #         Columns.EMBEDDINGS: hiddenStates,
-    #     }
+    @override(TorchRLModule)
+    def _forward_exploration(self, batch, **kwargs):
+        self.eval()
+        policyFeature, _, _, finalGrid, latents, _ = self._processPreHeads(batch)
+        policy = self.policy_branch(policyFeature)
+        return {
+            Columns.ACTION_DIST_INPUTS: policy,
+            Columns.STATE_OUT: {
+                "hiddenObs": latents[:, -1, :],
+                "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid[0].squeeze(0),
+            },
+        }
 
     def _getPolicyInput(self, features, gridCode):
         with torch.no_grad():
@@ -193,6 +194,7 @@ class LatentPathModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
+        self.train()
         (
             policyFeature,
             predictedPlaces,

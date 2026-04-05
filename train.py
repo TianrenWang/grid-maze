@@ -117,6 +117,7 @@ if __name__ == "__main__":
                     "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
+                    "self_localize": args.selfLocalize,
                 },
             ),
         )
@@ -157,7 +158,7 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],
                 )
-                if usesGrid():
+                if args.selfLocalize:
                     predictionError = np.round(
                         result["learners"]["default_policy"]["prediction_error"], 2
                     )
@@ -176,7 +177,7 @@ if __name__ == "__main__":
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )
                     # print("Place Bias:", placeBias)
-                if not args.selfLocalize:
+                else:
                     averageReturn = 0
                     averageSteps = 0
                     for j in range(numSamples):

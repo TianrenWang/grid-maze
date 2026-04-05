@@ -18,70 +18,76 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: Dict[str, Any],
         fwd_out: Dict[str, torch.Tensor],
     ):
-        parameters = self.module[module_id].named_parameters()
-        placeCells = None
-        for name, weight in parameters:
-            if name == "placeCells":
-                placeCells = weight
-
-        lossMask = batch["loss_mask"]
-        placeLogit = fwd_out["placeLogit"][lossMask]
-        placeTarget = fwd_out["placeTarget"][lossMask]
-        predictions = torch.nn.functional.softmax(placeLogit, -1)
-        placeLoss = torch.nn.functional.cross_entropy(
-            placeLogit.flatten(0, 1), placeTarget.flatten(0, 1)
-        )
-        if len(placeCells.shape) == 2:
-            decodedPredictedPositions = torch.matmul(predictions, placeCells)
-            decodedActualPositions = torch.matmul(placeTarget, placeCells)
-        else:
-            decodedPredictedPositions = torch.einsum(
-                "bmp,mpd->bmd", predictions, placeCells
-            )
-            decodedActualPositions = torch.einsum(
-                "bmp,mpd->bmd", placeTarget, placeCells
-            )
-        positionError = torch.mean(
-            torch.sqrt(
-                torch.sum((decodedPredictedPositions - decodedActualPositions) ** 2, -1)
-            )
-        )
-        self.metrics.log_value(
-            key=(module_id, "position_error"),
-            value=positionError.cpu().detach().numpy(),
-            window=100,
-        )
-        predictionError = torch.mean(
-            torch.sum(torch.abs(predictions - placeTarget), -1)
-        )
-        total_loss = super().compute_loss_for_module(
-            module_id=module_id,
-            config=config,
-            batch=batch,
-            fwd_out=fwd_out,
-        )
-
-        # Reconstruction Loss
-        latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
-        reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][lossMask]
-        reconstructionLoss = torch.nn.functional.mse_loss(reconstructedLatents, latents)
-        self.metrics.log_value(
-            key=(module_id, "reconstruction_loss"),
-            value=reconstructionLoss.cpu().detach().numpy(),
-            window=100,
-        )
         if config.learner_config_dict.get("self_localize"):
-            total_loss = placeLoss + reconstructionLoss
-        self.metrics.log_value(
-            key=(module_id, "prediction_error"),
-            value=predictionError.cpu().detach().numpy(),
-            window=100,
-        )
-        # targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)
-        # placeBias = torch.max(targetCounts) - torch.min(targetCounts)
-        # self.metrics.log_value(
-        #     key=(module_id, "place_bias"),
-        #     value=placeBias.cpu().detach().numpy(),
-        #     window=100,
-        # )
-        return total_loss
+            parameters = self.module[module_id].named_parameters()
+            placeCells = None
+            for name, weight in parameters:
+                if name == "placeCells":
+                    placeCells = weight
+
+            lossMask = batch["loss_mask"]
+            placeLogit = fwd_out["placeLogit"][lossMask]
+            placeTarget = fwd_out["placeTarget"][lossMask]
+            predictions = torch.nn.functional.softmax(placeLogit, -1)
+            placeLoss = torch.nn.functional.cross_entropy(
+                placeLogit.flatten(0, 1), placeTarget.flatten(0, 1)
+            )
+            if len(placeCells.shape) == 2:
+                decodedPredictedPositions = torch.matmul(predictions, placeCells)
+                decodedActualPositions = torch.matmul(placeTarget, placeCells)
+            else:
+                decodedPredictedPositions = torch.einsum(
+                    "bmp,mpd->bmd", predictions, placeCells
+                )
+                decodedActualPositions = torch.einsum(
+                    "bmp,mpd->bmd", placeTarget, placeCells
+                )
+            positionError = torch.mean(
+                torch.sqrt(
+                    torch.sum(
+                        (decodedPredictedPositions - decodedActualPositions) ** 2, -1
+                    )
+                )
+            )
+            self.metrics.log_value(
+                key=(module_id, "position_error"),
+                value=positionError.cpu().detach().numpy(),
+                window=100,
+            )
+            predictionError = torch.mean(
+                torch.sum(torch.abs(predictions - placeTarget), -1)
+            )
+
+            # Reconstruction Loss
+            latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
+            reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
+                lossMask
+            ]
+            reconstructionLoss = torch.nn.functional.mse_loss(
+                reconstructedLatents, latents
+            )
+            self.metrics.log_value(
+                key=(module_id, "reconstruction_loss"),
+                value=reconstructionLoss.cpu().detach().numpy(),
+                window=100,
+            )
+            self.metrics.log_value(
+                key=(module_id, "prediction_error"),
+                value=predictionError.cpu().detach().numpy(),
+                window=100,
+            )
+            # targetCounts = torch.sum(placeTarget, dim=0) / torch.sum(placeTarget)
+            # placeBias = torch.max(targetCounts) - torch.min(targetCounts)
+            # self.metrics.log_value(
+            #     key=(module_id, "place_bias"),
+            #     value=placeBias.cpu().detach().numpy(),
+            #     window=100,
+            # )
+            return placeLoss + reconstructionLoss
+        else:
+            return super().compute_loss_for_module(
+                module_id=module_id,
+                config=config,
+                batch=batch,
+                fwd_out=fwd_out,
+            )

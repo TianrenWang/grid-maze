@@ -180,9 +180,29 @@ class LatentPathModule(MemoryMazeModule):
         latents, _ = super()._processPreHeads(batch)
         with torch.no_grad():
             latentsWithoutGrad = torch.Tensor(latents)
-        gridCode, predictedPlaces, actualPlaces, finalGrid, reconstructedLatent = (
-            self._pathIntegrate(latentsWithoutGrad, initialLatent)
-        )
+        if self.model_config.get("self_localize"):
+            gridCode, predictedPlaces, actualPlaces, finalGrid, reconstructedLatent = (
+                self._pathIntegrate(latentsWithoutGrad, initialLatent)
+            )
+        else:
+            batchShape = latents.shape[:2]
+            finalGrid = torch.zeros(
+                [1, batchShape[0], NUM_MODULES * self.integratorSize],
+                dtype=torch.float32,
+                device=latents.device,
+            )
+            finalGrid = (finalGrid, finalGrid)
+            predictedPlaces = torch.zeros(
+                [*batchShape, NUM_MODULES, self.numPlaceCells],
+                dtype=torch.float32,
+                device=latents.device,
+            )
+            actualPlaces = predictedPlaces
+            reconstructedLatent = torch.zeros(
+                latents.shape,
+                dtype=torch.float32,
+                device=latents.device,
+            )
         return (
             self._getPolicyInput(latents, torch.nn.functional.dropout(gridCode)),
             predictedPlaces,

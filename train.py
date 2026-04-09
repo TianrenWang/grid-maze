@@ -129,7 +129,7 @@ if __name__ == "__main__":
         )
         .training(
             lr=args.lr,
-            entropy_coeff=0.01,
+            entropy_coeff=[[0, 0.1], [2800000, 0.1], [2800001, 0.01]],
         )
     )
     if usesGrid():
@@ -138,7 +138,6 @@ if __name__ == "__main__":
             learner_class=PPOTorchLearnerWithSelfPredLoss,
             learner_config_dict=config,
             lr=args.lr,
-            entropy_coeff=0.01,
         )
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()

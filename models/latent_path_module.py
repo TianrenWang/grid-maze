@@ -164,14 +164,16 @@ class LatentPathModule(MemoryMazeModule):
                 "candidateGrid": finalGrid[1].squeeze(0),
                 "hiddenGrid": finalGrid[0].squeeze(0),
             },
+            "actualLatents": latents,
         }
 
     def _getPolicyInput(self, features, gridCode):
         with torch.no_grad():
             gridWithoutGrad = torch.Tensor(gridCode)
+            featuresWithoutGrad = torch.Tensor(features)
         compressedGrid = self.gridCompressor.forward(gridWithoutGrad)
         encodedMemory = self.memoryEncoder(
-            torch.concat([features, compressedGrid], dim=2)
+            torch.concat([featuresWithoutGrad, compressedGrid], dim=2)
         )
         return encodedMemory
 

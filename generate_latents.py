@@ -34,12 +34,16 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     encounteredStates = set()
     latentStates = []
     stateLabels = []
+    renderCount = 0
 
-    while episodes < 100:
+    while episodes < 200:
+        gameId = str(uuid.uuid4())[:8]
+        if renderCount < 3:
+            env._debugging = True
+            print(gameId)
         previousState = module.get_initial_state()
         obs, _ = env.reset()
         done = False
-        gameId = uuid.uuid4()
         episodicLatentStates = []
         episodicStateLabels = []
         wallEncounter = set()
@@ -84,12 +88,14 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
             obs, _, done, truncated, _ = env.step(action)
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
-        episodes += 1
-        # if env._episode_len < 100:
-        for state in episodicLatentStates:
-            latentStates.append(state)
-        for label in episodicStateLabels:
-            stateLabels.append(label)
+        if env._episode_len < 50:
+            renderCount += 1
+            episodes += 1
+            for state in episodicLatentStates:
+                latentStates.append(state)
+            for label in episodicStateLabels:
+                stateLabels.append(label)
+        env._debugging = False
 
     saveGameData(latentStates, stateLabels, expName)
 
@@ -98,7 +104,7 @@ def saveGameData(
     states,
     stateLabels,
     dataName: str,
-    columnNames=["game ID", "step", "stage"],
+    columnNames=["game ID", "step", "stage", "positionId"],
 ):
     folder_path = "data/" + dataName
     if os.path.exists(folder_path):

@@ -153,7 +153,7 @@ class LatentPathModule(MemoryMazeModule):
         )
         predictedPlaceLogit = torch.einsum(
             "btmg,mgp->btmp",
-            torch.nn.functional.dropout(gridCodes),
+            torch.nn.functional.dropout(gridCodes, training=self.training),
             self.placeDecoderWeight,
         )
         return (
@@ -175,25 +175,28 @@ class LatentPathModule(MemoryMazeModule):
             ),
         }
 
-    # def _forward_exploration(self, batch, **kwargs):
-    #     hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
-    #     policy = self.policy_branch(hiddenStates)
-    #     return {
-    #         Columns.ACTION_DIST_INPUTS: policy,
-    #         Columns.STATE_OUT: {
-    #             "hiddenObs": hiddenStates[:, -1],
-    #             "candidateGrid": finalGrid[1].squeeze(0),
-    #             "hiddenGrid": finalGrid[0].squeeze(0),
-    #         },
-    #         Columns.EMBEDDINGS: hiddenStates,
-    #     }
+    @override(TorchRLModule)
+    def _forward_exploration(self, batch, **kwargs):
+        self.eval()
+        policyFeature, _, _, finalGrid, latents, _ = self._processPreHeads(batch)
+        policy = self.policy_branch(policyFeature)
+        return {
+            Columns.ACTION_DIST_INPUTS: policy,
+            Columns.STATE_OUT: {
+                "hiddenObs": latents[:, -1, :],
+                "candidateGrid": finalGrid[1].squeeze(0),
+                "hiddenGrid": finalGrid[0].squeeze(0),
+            },
+            "latents": latents,
+        }
 
     def _getPolicyInput(self, features, gridCode):
         with torch.no_grad():
             gridWithoutGrad = torch.Tensor(gridCode)
+            featuresWithoutGrad = torch.Tensor(features)
         compressedGrid = self.gridCompressor.forward(gridWithoutGrad)
         encodedMemory = self.memoryEncoder(
-            torch.concat([features, compressedGrid], dim=2)
+            torch.concat([featuresWithoutGrad, compressedGrid], dim=2)
         )
         return encodedMemory
 
@@ -202,9 +205,24 @@ class LatentPathModule(MemoryMazeModule):
         latents, _ = super()._processPreHeads(batch)
         with torch.no_grad():
             latentsWithoutGrad = torch.Tensor(latents)
-        gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
-            latentsWithoutGrad, initialLatent
-        )
+        if self.model_config.get("self_localize"):
+            gridCode, predictedPlaces, actualPlaces, finalGrid = self._pathIntegrate(
+                latentsWithoutGrad, initialLatent
+            )
+        else:
+            batchShape = latents.shape[:2]
+            finalGrid = torch.zeros(
+                [1, batchShape[0], NUM_MODULES * self.integratorSize],
+                dtype=torch.float32,
+                device=latents.device,
+            )
+            finalGrid = (finalGrid, finalGrid)
+            predictedPlaces = torch.zeros(
+                [*batchShape, NUM_MODULES, self.numPlaceCells],
+                dtype=torch.float32,
+                device=latents.device,
+            )
+            actualPlaces = predictedPlaces
         return (
             self._getPolicyInput(latents, torch.nn.functional.dropout(gridCode)),
             predictedPlaces,
@@ -215,6 +233,7 @@ class LatentPathModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
+        self.train()
         (
             policyFeature,
             predictedPlaces,

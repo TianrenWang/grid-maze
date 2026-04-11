@@ -113,13 +113,13 @@ class MazeEnv(gym.Env):
             # self._shortestDistance = np.sum(
             #     np.abs(self._agentLocation - self._goalLocation)
             # )
-            goalDistance = np.abs(self._agentLocation - self._goalLocation)
-            if goalDistance[0] <= 4 and goalDistance[1] <= 4:
-                self._shortestDistance = np.sum(goalDistance)
-            else:
-                self._shortestDistance = self.getWorstCaseTry(
-                    self._agentLocation[1], self._goalLocation[1]
-                ) + self.getWorstCaseTry(self._agentLocation[0], self._goalLocation[0])
+        goalDistance = np.abs(self._agentLocation - self._goalLocation)
+        if goalDistance[0] <= 4 and goalDistance[1] <= 4:
+            self._shortestDistance = np.sum(goalDistance)
+        else:
+            self._shortestDistance = self.getWorstCaseTry(
+                self._agentLocation[1], self._goalLocation[1]
+            ) + self.getWorstCaseTry(self._agentLocation[0], self._goalLocation[0])
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)

@@ -9,7 +9,7 @@ from ray.rllib.utils.annotations import override
 from .agent_models import MemoryMazeModule
 from .multi_head_lstm import MultiHeadLSTM
 
-NUM_MODULES = 2
+NUM_MODULES = 10
 GRID_MODULE_DIM = 2
 
 
@@ -188,6 +188,11 @@ class LatentPathModule(MemoryMazeModule):
             )
         else:
             batchShape = latents.shape[:2]
+            gridCode = torch.zeros(
+                [*batchShape[:2], NUM_MODULES * self.gridSize],
+                dtype=torch.float32,
+                device=latents.device,
+            )
             finalGrid = torch.zeros(
                 [1, batchShape[0], NUM_MODULES * self.integratorSize],
                 dtype=torch.float32,

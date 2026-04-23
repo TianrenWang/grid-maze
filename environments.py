@@ -56,7 +56,7 @@ class MazeEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         if self._randomMaze:
-            self._mazeArray = generateMaze(self._mazeSize, 0.03)
+            self._mazeArray = generateMaze(self._mazeSize)
 
         mazeSize = len(self._mazeArray)
         if not self._fixedGoal:
@@ -122,7 +122,7 @@ class MazeEnv(gym.Env):
         return (
             0 <= location[0] < len(self._mazeArray)
             and 0 <= location[1] < len(self._mazeArray)
-            # and self._map[location[0], location[1], 0] == 1
+            and self._map[location[0], location[1], 0] == 1
         )
 
     def step(self, action):

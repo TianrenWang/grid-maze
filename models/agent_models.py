@@ -24,6 +24,7 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
                 self.linearHiddenSize,
             ),
             nn.ReLU(),
+            nn.Dropout(),
         )
         self.policy_branch = nn.Linear(self.linearHiddenSize, self.action_space.n)
         self.value_branch = nn.Linear(self.linearHiddenSize, 1)

@@ -34,13 +34,12 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     encounteredStates = set()
     latentStates = []
     stateLabels = []
-    renderCount = 0
+    randomEpisodes = 0
+    episodeRenders = dict()
+    numRandomEpisodesToGenerate = 0
 
     while episodes < 200:
         gameId = str(uuid.uuid4())[:8]
-        if renderCount < 3:
-            env._debugging = True
-            print(gameId)
         previousState = module.get_initial_state()
         obs, _ = env.reset()
         done = False
@@ -74,7 +73,12 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 encounteredStates.add(str(latent))
                 episodicLatentStates.append(latent)
                 episodicStateLabels.append(
-                    [str(gameId)[:8], env._episode_len, latentStage]
+                    [
+                        gameId,
+                        env._episode_len,
+                        latentStage,
+                        f"{gameId}-{env._episode_len}",
+                    ]
                 )
             action = np.random.choice(
                 4,
@@ -85,19 +89,28 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 .cpu()
                 .numpy(),
             )
+            if randomEpisodes < numRandomEpisodesToGenerate and env._episode_len < 200:
+                action = np.random.choice(4)
             obs, _, done, truncated, _ = env.step(action)
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
+
+        episodeRenders[gameId] = env.render()
+        if randomEpisodes < numRandomEpisodesToGenerate:
+            print(gameId)
+            print(episodeRenders[gameId])
+
         if env._episode_len < 50:
-            renderCount += 1
             episodes += 1
             for state in episodicLatentStates:
                 latentStates.append(state)
             for label in episodicStateLabels:
                 stateLabels.append(label)
-        env._debugging = False
 
     saveGameData(latentStates, stateLabels, expName)
+    while True:
+        gameId = input("Enter game ID: ")
+        print(episodeRenders[gameId])
 
 
 def saveGameData(

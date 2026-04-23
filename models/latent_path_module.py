@@ -16,14 +16,13 @@ GRID_MODULE_DIM = 2
 class ModuleProjector(nn.Module):
     def __init__(self, inputSize: int, latentSize: int):
         super().__init__()
-        self.encoderWeight = nn.Parameter(torch.randn(inputSize, latentSize))
-        self.decoder = nn.Linear(latentSize, inputSize, bias=False)
+        self.encoder = nn.Sequential(nn.Linear(inputSize, latentSize), nn.Sigmoid())
+        self.decoder = nn.Sequential(nn.Linear(latentSize, inputSize), nn.Tanh())
 
-    def forward(self, z: torch.Tensor):
-        normalizedWeight = torch.softmax(self.encoderWeight, dim=1)
-        latent = z @ normalizedWeight
-        reconstructed = self.decoder(latent)
-        return latent, reconstructed
+    def forward(self, latent: torch.Tensor):
+        projection = self.encoder(latent)
+        reconstructed = self.decoder(projection)
+        return projection, reconstructed
 
 
 class LatentPathModule(MemoryMazeModule):
@@ -62,7 +61,7 @@ class LatentPathModule(MemoryMazeModule):
             torch.Tensor(NUM_MODULES, self.gridSize, self.numPlaceCells)
         )
         self.placeCells = nn.Parameter(
-            (torch.rand([NUM_MODULES, self.numPlaceCells, GRID_MODULE_DIM]) - 0.5) * 2,
+            torch.rand([NUM_MODULES, self.numPlaceCells, GRID_MODULE_DIM]),
             False,
         )
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
@@ -95,28 +94,19 @@ class LatentPathModule(MemoryMazeModule):
 
     def _pathIntegrate(
         self,
-        latents: torch.Tensor,
-        initialLatents: torch.Tensor,
+        sequenceProjections: torch.Tensor,
+        initialProjections: torch.Tensor,
     ):
-        currentProjections, reconstructedLatent = self.moduleProjector.forward(latents)
-        pastProjections, _ = self.moduleProjector.forward(initialLatents)
-        with torch.no_grad():
-            currentProjections = currentProjections.reshape(
-                [*latents.shape[:2], NUM_MODULES, GRID_MODULE_DIM]
-            )
-            pastProjections = pastProjections.reshape(
-                [initialLatents.shape[0], NUM_MODULES, GRID_MODULE_DIM]
-            )
-        pastPlaceCellActivations = self.get_place_activation(pastProjections)
+        pastPlaceCellActivations = self.get_place_activation(initialProjections)
         encodedPlace = torch.einsum(
             "bmp,mpe->bme", pastPlaceCellActivations, self.placeEncoderWeight
         ) + self.placeEncoderBias.unsqueeze(0)
         initialHidden = encodedPlace[:, :, : self.integratorSize].contiguous()
         initialCandidate = encodedPlace[:, :, self.integratorSize :].contiguous()
-        movements = currentProjections - torch.concat(
+        movements = sequenceProjections - torch.concat(
             [
-                pastProjections[:, None, :, :],
-                currentProjections[:, :-1, :, :],
+                initialProjections[:, None, :, :],
+                sequenceProjections[:, :-1, :, :],
             ],
             dim=1,
         )
@@ -135,9 +125,7 @@ class LatentPathModule(MemoryMazeModule):
         return (
             gridCodes.flatten(2),
             predictedPlaceLogit,
-            self.get_place_activation(currentProjections),
             finalStates,
-            reconstructedLatent,
         )
 
     @override(TorchRLModule)
@@ -182,10 +170,23 @@ class LatentPathModule(MemoryMazeModule):
         latents, _ = super()._processPreHeads(batch)
         with torch.no_grad():
             latentsWithoutGrad = torch.Tensor(latents)
+            initialLatentsWithoutGrad = torch.Tensor(initialLatent)
         if self.model_config.get("self_localize"):
-            gridCode, predictedPlaces, actualPlaces, finalGrid, reconstructedLatent = (
-                self._pathIntegrate(latentsWithoutGrad, initialLatent)
+            sequenceProjections, reconstructedLatent = self.moduleProjector.forward(
+                latentsWithoutGrad
             )
+            pastProjections, _ = self.moduleProjector.forward(initialLatentsWithoutGrad)
+            with torch.no_grad():
+                sequenceProjections = sequenceProjections.reshape(
+                    [*latents.shape[:2], NUM_MODULES, GRID_MODULE_DIM]
+                )
+                pastProjections = pastProjections.reshape(
+                    [initialLatent.shape[0], NUM_MODULES, GRID_MODULE_DIM]
+                )
+            gridCode, predictedPlaces, finalGrid = self._pathIntegrate(
+                sequenceProjections, pastProjections
+            )
+            actualPlaces = self.get_place_activation(sequenceProjections)
         else:
             batchShape = latents.shape[:2]
             gridCode = torch.zeros(

@@ -9,7 +9,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
-from maze import generateMaze, print_maze
+from maze import generateMaze, getMazeDebugString
 from environments import (
     MazeEnv,
     FoggedMazeEnv,
@@ -70,7 +70,7 @@ if __name__ == "__main__":
             with open(f"{mazesPath}/{mazeName}.pkl", "wb") as file:
                 pickle.dump(maze, file)
 
-        print_maze(maze)
+        getMazeDebugString(maze)
 
     if usesGrid():
         module = models.PlaceMazeModule
@@ -148,7 +148,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
-        numSamples = 10
+        numSamples = 1
         for i in range(args.numLearn):
             result = agent.train()
             if i % args.evalInterval == 0:

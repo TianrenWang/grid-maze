@@ -46,6 +46,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
         episodicLatentStates = []
         episodicStateLabels = []
         wallEncounter = set()
+        gotFinalStage = False
         while not done:
             obs = torch.from_numpy(obs).unsqueeze(0).unsqueeze(0)
             batched_obs = {
@@ -70,16 +71,29 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 goalDistance = np.abs(env._agentLocation - env._goalLocation)
                 if goalDistance[0] <= 4 and goalDistance[1] <= 4:
                     latentStage = 5
+                    if not gotFinalStage and len(episodicStateLabels):
+                        episodicStateLabels[-1][2] = 4.5
+                        gotFinalStage = True
                 else:
                     latentStage = len(wallEncounter)
                 encounteredStates.add(str(latent))
                 episodicLatentStates.append(latent)
+                numberOfDigitsInEpisodeLen = len(str(env._episode_len))
+                if env._agentLocation[0] < 15 and env._agentLocation[1] < 15:
+                    quadrant = 0
+                elif env._agentLocation[0] >= 15 and env._agentLocation[1] >= 15:
+                    quadrant = 3
+                elif env._agentLocation[0] < 15:
+                    quadrant = 1
+                else:
+                    quadrant = 2
                 episodicStateLabels.append(
                     [
                         gameId,
                         env._episode_len,
                         latentStage,
-                        f"{gameId}-{env._episode_len}",
+                        f"{gameId}-{(3 - numberOfDigitsInEpisodeLen) * '0'}{env._episode_len}",
+                        quadrant,
                     ]
                 )
             action = np.random.choice(
@@ -102,7 +116,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
             print(gameId)
             print(episodeRenders[gameId])
 
-        if env._episode_len < 50:
+        if env._episode_len < 100:
             episodes += 1
             for state in episodicLatentStates:
                 latentStates.append(state)
@@ -119,7 +133,7 @@ def saveGameData(
     states,
     stateLabels,
     dataName: str,
-    columnNames=["game ID", "step", "stage", "positionId"],
+    columnNames=["game ID", "step", "stage", "positionId", "quadrant"],
 ):
     folder_path = "data/" + dataName
     if os.path.exists(folder_path):

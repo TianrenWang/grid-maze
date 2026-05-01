@@ -162,20 +162,23 @@ class MazeEnv(gym.Env):
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
+        renderOutput = [
+            [i for i in range(self._mazeSize)] for j in range(self._mazeSize)
+        ]
         for i in range(self._mazeSize):
             for j in range(self._mazeSize):
                 if not self._mazeTracker[i][j]:
-                    self._mazeTracker[i][j] = " "
-        return getMazeDebugString(self._mazeTracker)
+                    renderOutput[i][j] = " "
+                else:
+                    renderOutput[i][j] = self._mazeTracker[i][j]
+        return getMazeDebugString(renderOutput)
 
 
 class FoggedMazeEnv(MazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
         self._visualRange = config.get("visualRange", 4)
-        self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
-        self._memory = None
         self.observation_space = gym.spaces.MultiBinary(
             (visualObsSize, visualObsSize, 3)
         )
@@ -196,45 +199,7 @@ class FoggedMazeEnv(MazeEnv):
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
             :,
         ]
-        """
-        The following logic imposes obstructed vision that was more
-        accurate when the maze path was 1 unit wide. Now that we
-        switch to more of an open field style maze, it is no longer
-        applicable.
-        """
-        # mask = np.zeros((9, 9, 3), dtype=bool)
-        # mask[4, :] = True
-        # mask[:, 4] = True
-        # vision[~mask] = 0
-        # leftVision = vision[4, :4, 0].squeeze().flatten()
-        # leftZeroIdx = np.where(leftVision == 0)[0]
-        # rightVision = vision[4, 5:, 0].squeeze().flatten()
-        # rightZeroIdx = np.where(rightVision == 0)[0]
-        # upVision = vision[:4, 4, 0].squeeze().flatten()
-        # upZeroIdx = np.where(upVision == 0)[0]
-        # downVision = vision[5:, 4, 0].squeeze().flatten()
-        # downZeroIdx = np.where(downVision == 0)[0]
-        # if len(leftZeroIdx):
-        #     vision[4, : leftZeroIdx[-1], :] = 0
-        # if len(rightZeroIdx):
-        #     vision[4, 5 + rightZeroIdx[0] :, :] = 0
-        # if len(upZeroIdx):
-        #     vision[: upZeroIdx[-1], 4, :] = 0
-        # if len(downZeroIdx):
-        #     vision[5 + downZeroIdx[0] :, 4, :] = 0
-
-        if self._memoryLen > 1:
-            if not self._memory:
-                self._memory = [vision]
-            else:
-                self._memory.append(vision)
-            if len(self._memory) > self._memoryLen:
-                self._memory.pop(0)
         return vision
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        self._memory = None
-        return super().reset(seed=seed)
 
 
 class PlaceMazeEnv(FoggedMazeEnv):

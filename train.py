@@ -10,11 +10,7 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
 from maze import generateMaze, getMazeDebugString
-from environments import (
-    MazeEnv,
-    FoggedMazeEnv,
-    PlaceMazeEnv,
-)
+from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -85,6 +81,8 @@ if __name__ == "__main__":
 
     if args.latentPath:
         env = FoggedMazeEnv
+    elif args.selfLocalize:
+        env = SelfLocalizeEnv
     elif args.grid or args.gps:
         env = PlaceMazeEnv
     elif args.fogged:

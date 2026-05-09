@@ -19,6 +19,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         fwd_out: Dict[str, torch.Tensor],
     ):
         if config.learner_config_dict.get("self_localize"):
+            loss = 0
             parameters = self.module[module_id].named_parameters()
             placeCells = None
             for name, weight in parameters:
@@ -42,6 +43,22 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 decodedActualPositions = torch.einsum(
                     "bmp,mpd->bmd", placeTarget, placeCells
                 )
+
+                # Reconstruction Loss
+                latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
+                reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
+                    lossMask
+                ]
+                reconstructionLoss = torch.nn.functional.mse_loss(
+                    reconstructedLatents, latents
+                )
+                self.metrics.log_value(
+                    key=(module_id, "reconstruction_loss"),
+                    value=reconstructionLoss.cpu().detach().numpy(),
+                    window=100,
+                )
+                loss += reconstructionLoss
+
             positionError = torch.mean(
                 torch.sqrt(
                     torch.sum(
@@ -58,19 +75,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 torch.sum(torch.abs(predictions - placeTarget), -1)
             )
 
-            # Reconstruction Loss
-            latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
-            reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
-                lossMask
-            ]
-            reconstructionLoss = torch.nn.functional.mse_loss(
-                reconstructedLatents, latents
-            )
-            self.metrics.log_value(
-                key=(module_id, "reconstruction_loss"),
-                value=reconstructionLoss.cpu().detach().numpy(),
-                window=100,
-            )
             self.metrics.log_value(
                 key=(module_id, "prediction_error"),
                 value=predictionError.cpu().detach().numpy(),
@@ -83,7 +87,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             #     value=placeBias.cpu().detach().numpy(),
             #     window=100,
             # )
-            return placeLoss + reconstructionLoss
+            loss += placeLoss
+            return loss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

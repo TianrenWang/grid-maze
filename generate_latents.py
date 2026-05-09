@@ -24,7 +24,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
             "maze": None,
             "goal": (mazeSize // 2, mazeSize // 2),
             "start": None,
-            "maxSteps": 1000,
+            "maxSteps": 200,
             "mazeSize": mazeSize,
         }
     )
@@ -34,7 +34,6 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     encounteredStates = set()
     latentStates = []
     stateLabels = []
-    randomEpisodes = 0
     episodeRenders = dict()
     numRandomEpisodesToGenerate = 0
 
@@ -94,6 +93,28 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                         latentStage,
                         f"{gameId}-{(3 - numberOfDigitsInEpisodeLen) * '0'}{env._episode_len}",
                         quadrant,
+                        np.round(
+                            np.linalg.norm(env._agentLocation - env._goalLocation),
+                            decimals=2,
+                        ),
+                        np.round(
+                            np.linalg.norm(env._agentLocation - np.array([0, 0])),
+                            decimals=2,
+                        ),
+                        np.round(
+                            np.linalg.norm(env._agentLocation - np.array([29, 29])),
+                            decimals=2,
+                        ),
+                        np.round(
+                            np.linalg.norm(env._agentLocation - np.array([0, 29])),
+                            decimals=2,
+                        ),
+                        np.round(
+                            np.linalg.norm(env._agentLocation - np.array([29, 0])),
+                            decimals=2,
+                        ),
+                        np.round(env._agentLocation, decimals=2).tolist(),
+                        env._episode_len > 50,
                     ]
                 )
             action = np.random.choice(
@@ -105,23 +126,19 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 .cpu()
                 .numpy(),
             )
-            if randomEpisodes < numRandomEpisodesToGenerate and env._episode_len < 200:
+            if episodes < numRandomEpisodesToGenerate and env._episode_len < 200:
                 action = np.random.choice(4)
             obs, _, done, truncated, _ = env.step(action)
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
 
         episodeRenders[gameId] = env.render()
-        if randomEpisodes < numRandomEpisodesToGenerate:
-            print(gameId)
-            print(episodeRenders[gameId])
 
-        if env._episode_len < 100:
-            episodes += 1
-            for state in episodicLatentStates:
-                latentStates.append(state)
-            for label in episodicStateLabels:
-                stateLabels.append(label)
+        episodes += 1
+        for state in episodicLatentStates:
+            latentStates.append(state)
+        for label in episodicStateLabels:
+            stateLabels.append(label)
 
     saveGameData(latentStates, stateLabels, expName)
     while True:
@@ -133,7 +150,20 @@ def saveGameData(
     states,
     stateLabels,
     dataName: str,
-    columnNames=["game ID", "step", "stage", "positionId", "quadrant"],
+    columnNames=[
+        "game ID",
+        "step",
+        "stage",
+        "positionId",
+        "quadrant",
+        "center",
+        "top-left",
+        "bottom-right",
+        "top-right",
+        "bottom-left",
+        "location",
+        "unstable",
+    ],
 ):
     folder_path = "data/" + dataName
     if os.path.exists(folder_path):

@@ -9,7 +9,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
-from maze import generateMaze, print_maze
+from maze import generateMaze, getMazeDebugString
 from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
@@ -37,11 +37,12 @@ parser.add_argument("--selfLocalize", type=str2bool, default=False)
 parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", type=str2bool, default=False)
 parser.add_argument("--gps", type=str2bool, default=False)
+parser.add_argument("--latentPath", type=str2bool, default=False)
 args = parser.parse_args()
 
 
 def usesGrid():
-    return args.grid or args.selfLocalize
+    return args.grid or args.selfLocalize or args.latentPath
 
 
 if __name__ == "__main__":
@@ -65,10 +66,12 @@ if __name__ == "__main__":
             with open(f"{mazesPath}/{mazeName}.pkl", "wb") as file:
                 pickle.dump(maze, file)
 
-        print_maze(maze)
+        getMazeDebugString(maze)
 
     if usesGrid():
         module = models.PlaceMazeModule
+        if args.latentPath:
+            module = models.LatentPathModule
     elif args.gps:
         module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
@@ -76,7 +79,9 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize:
+    if args.latentPath:
+        env = FoggedMazeEnv
+    elif args.selfLocalize:
         env = SelfLocalizeEnv
     elif args.grid or args.gps:
         env = PlaceMazeEnv
@@ -110,6 +115,7 @@ if __name__ == "__main__":
                     "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
+                    "self_localize": args.selfLocalize,
                 },
             ),
         )
@@ -121,7 +127,9 @@ if __name__ == "__main__":
         )
         .training(
             lr=args.lr,
-            entropy_coeff=0.01,
+            entropy_coeff=[[0, 0.1], [8000000, 0.1], [8000001, 0.01]]
+            if not args.grid
+            else 0.01,
         )
     )
     if usesGrid():
@@ -130,7 +138,6 @@ if __name__ == "__main__":
             learner_class=PPOTorchLearnerWithSelfPredLoss,
             learner_config_dict=config,
             lr=args.lr,
-            entropy_coeff=0.01,
         )
     agentConfig.env_config = environmentConfig
     agent = agentConfig.build_algo()
@@ -141,7 +148,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
-        numSamples = 0 if args.selfLocalize else 10
+        numSamples = 1
         for i in range(args.numLearn):
             result = agent.train()
             if i % args.evalInterval == 0:
@@ -150,7 +157,7 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],
                 )
-                if usesGrid():
+                if args.selfLocalize:
                     predictionError = np.round(
                         result["learners"]["default_policy"]["prediction_error"], 2
                     )
@@ -159,20 +166,28 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["position_error"], 2
                     )
                     print("Position Error:", positionError)
-                    placeBias = np.round(
-                        result["learners"]["default_policy"]["place_bias"], 2
-                    )
-                    print("Place Bias:", placeBias)
-                averageReturn = 0
-                averageSteps = 0
-                for j in range(numSamples):
-                    result = agent.evaluate()["env_runners"]
-                    averageReturn += result["episode_return_mean"]
-                    averageSteps += result["episode_len_mean"]
-                if not args.selfLocalize:
+                    if args.latentPath:
+                        reconstructionLoss = np.round(
+                            result["learners"]["default_policy"]["reconstruction_loss"],
+                            2,
+                        )
+                        print("Reconstruction Loss:", reconstructionLoss)
+                    # placeBias = np.round(
+                    #     result["learners"]["default_policy"]["place_bias"], 2
+                    # )
+                    # print("Place Bias:", placeBias)
+                else:
+                    averageReturn = 0
+                    averageSteps = 0
+                    for j in range(numSamples):
+                        result = agent.evaluate()["env_runners"]
+                        averageReturn += result["episode_return_mean"]
+                        averageSteps += result["episode_len_mean"]
                     averageReturn = round(averageReturn / numSamples, 2)
+                    print("Performance:", averageReturn)
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)
-                    print("Performance:", averageReturn)
-                    numSamples = int(10 * averageReturn / numSamples) + 1
+                    numSamples = (
+                        int((args.maxSteps - averageSteps) / args.maxSteps * 10) + 1
+                    )
                 agent.save(checkpointPath)

@@ -55,14 +55,16 @@ def generateMaze(size: int, p_obstacle: float = 0.02):
     return maze
 
 
-def print_maze(maze):
-    print("".join("." for i in range(len(maze) + 2)))
+def getMazeDebugString(maze):
+    mazeString = []
+    mazeString.append("".join("." for i in range(len(maze) + 2)))
     for row in maze:
         rowContent = "".join(str(cell) for cell in row)
-        print("." + rowContent + ".")
-    print("".join("." for i in range(len(maze) + 2)))
+        mazeString.append("." + rowContent + ".")
+    mazeString.append("".join("." for i in range(len(maze) + 2)))
+    return "\n".join(mazeString)
 
 
 if __name__ == "__main__":
     maze = generateMaze(20)
-    print_maze(maze)
+    print(getMazeDebugString(maze))

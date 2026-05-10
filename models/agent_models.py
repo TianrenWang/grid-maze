@@ -16,13 +16,15 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         self.inputSize = self.model_config.get("inputSize", 13)
         self.linearHiddenSize = self.hiddenSize * 8
         self.primaryConvModule = SimpleConv(self.hiddenSize)
-        primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
+        self.primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
             nn.Flatten(),
             nn.Linear(
-                primaryConvModuleOutSize**2 * self.hiddenSize * 2, self.linearHiddenSize
+                self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
+                self.linearHiddenSize,
             ),
             nn.ReLU(),
+            nn.Dropout(),
         )
         self.policy_branch = nn.Linear(
             self.linearHiddenSize, self.action_space.shape[0]
@@ -57,9 +59,9 @@ class MemoryMazeModule(SimpleMazeModule):
 
     @override(TorchRLModule)
     def get_initial_state(self):
-        return {"h": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
+        return {"hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
 
-    def _processConvolution(self, vision):
+    def _processConvolution(self, vision) -> torch.Tensor:
         visionShape = vision.shape
         vision = vision.reshape(-1, *visionShape[2:])
         vision = vision.permute(0, 3, 1, 2).to(torch.float32)
@@ -69,7 +71,7 @@ class MemoryMazeModule(SimpleMazeModule):
         return visionFeatures
 
     def _processPreHeads(self, batch):
-        initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
+        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
         vision = batch[Columns.OBS]
         visionFeatures = self._processConvolution(vision)
         return self.trajectoryMemory(visionFeatures, initialHidden)
@@ -80,7 +82,7 @@ class MemoryMazeModule(SimpleMazeModule):
         policy = self.policy_branch(allHiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
-            Columns.STATE_OUT: {"h": finalHiddenState.squeeze(0)},
+            Columns.STATE_OUT: {"hiddenObs": finalHiddenState.squeeze(0)},
             Columns.EMBEDDINGS: allHiddenStates,
         }
 
@@ -107,8 +109,16 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
-        self.fieldSize = self.mazeSize / math.sqrt(self.numPlaceCells) * 0.01
+        self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
+        self.prePredictionHead = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(
+                self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
+                self.linearHiddenSize,
+            ),
+            nn.ReLU(),
+        )
 
     def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():

@@ -1,9 +1,8 @@
 from typing import Optional
-from collections import deque
 import numpy as np
 import gymnasium as gym
 
-from maze import print_maze, generateMaze
+from maze import getMazeDebugString, generateMaze
 from environment_utils import getBoundaryPoint, getOverlap
 
 
@@ -47,32 +46,13 @@ class MazeEnv(gym.Env):
     def _getObs(self):
         return {"vision": self._map}
 
-    def getShortestDistance(self):
-        size = len(self._mazeArray)
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        queue = deque([(1, 1, 0)])
-
-        visited = set()
-        visited.add((self._agentLocation[0], self._agentLocation[1]))
-        maze = self._mazeArray
-
-        while queue:
-            r, c, dist = queue.popleft()
-            if (r, c) == (size - 2, size - 2):
-                return dist
-
-            for dr, dc in directions:
-                nr, nc = r + dr, c + dc
-                if (
-                    0 <= nr < size
-                    and 0 <= nc < size
-                    and maze[nr][nc] == 1
-                    and (nr, nc) not in visited
-                ):
-                    visited.add((nr, nc))
-                    queue.append((nr, nc, dist + 1))
-
-        return -1
+    def getWorstCaseTry(self, location: int, goal: int):
+        if location <= 4 or self._mazeSize - location <= 4:
+            return abs(goal - location)
+        elif location > goal:
+            return self._mazeSize - 4 - location + self._mazeSize - 4 - goal
+        else:
+            return location + goal - 8
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -116,24 +96,20 @@ class MazeEnv(gym.Env):
             agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
 
-        if self._debugging:
-            self._mazeTracker = []
-            for i in range(self._mazeSize):
-                currentRow = []
-                self._mazeTracker.append(currentRow)
-                for j in range(self._mazeSize):
-                    originalValue = self._mazeArray[i][j]
-                    if not originalValue:
-                        currentRow.append("X")
-                    elif originalValue == 1:
-                        currentRow.append(0)
-                    else:
-                        currentRow.append(originalValue)
-            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
-            self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
-            self._shortestDistance = np.sum(
-                np.abs(self._agentLocation - self._goalLocation)
-            )
+        self._mazeTracker = []
+        for i in range(self._mazeSize):
+            currentRow = []
+            self._mazeTracker.append(currentRow)
+            for j in range(self._mazeSize):
+                originalValue = self._mazeArray[i][j]
+                if not originalValue:
+                    currentRow.append("X")
+                elif originalValue == 1:
+                    currentRow.append(0)
+                else:
+                    currentRow.append(originalValue)
+        self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
+        self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
 
         self._pastLocation = self._agentLocation
         mazeChannel = np.expand_dims(self._mazeArray, axis=2)
@@ -164,34 +140,46 @@ class MazeEnv(gym.Env):
         terminated = np.array_equal(self._agentLocation, self._goalLocation)
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
-        reward = 1 if terminated else 0
-        if self._debugging:
-            agentLocationValue = self._mazeTracker[self._agentLocation[0]][
-                self._agentLocation[1]
-            ]
-            if isinstance(agentLocationValue, int) and agentLocationValue < 9:
-                self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] += 1
-            if terminated or truncated:
-                self.render()
+        if terminated:
+            if self._episode_len > 100:
+                reward = 0.1
+            else:
+                closenessFactor = 1 - (self._episode_len - self._shortestDistance) / (
+                    100 - self._shortestDistance
+                )
+                reward = 0.1 + closenessFactor**2
+        else:
+            reward = 0
+
+        agentLocationValue = self._mazeTracker[self._agentLocation[0]][
+            self._agentLocation[1]
+        ]
+        if isinstance(agentLocationValue, int) and agentLocationValue < 9:
+            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] += 1
+        if (terminated or truncated) and self._debugging:
+            print("Steps:", self._episode_len)
+            print("Shortest:", self._shortestDistance)
+            print(self.render())
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
+        renderOutput = [
+            [i for i in range(self._mazeSize)] for j in range(self._mazeSize)
+        ]
         for i in range(self._mazeSize):
             for j in range(self._mazeSize):
                 if not self._mazeTracker[i][j]:
-                    self._mazeTracker[i][j] = " "
-        print_maze(self._mazeTracker)
-        print("Steps:", self._episode_len)
-        print("Shortest:", self._shortestDistance)
+                    renderOutput[i][j] = " "
+                else:
+                    renderOutput[i][j] = self._mazeTracker[i][j]
+        return getMazeDebugString(renderOutput)
 
 
 class FoggedMazeEnv(MazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
         self._visualRange = config.get("visualRange", 4)
-        self._memoryLen = config.get("memoryLen", False)
         visualObsSize = self._visualRange * 2 + 1
-        self._memory = None
         self.observation_space = gym.spaces.MultiBinary(
             (visualObsSize, visualObsSize, 3)
         )
@@ -212,45 +200,7 @@ class FoggedMazeEnv(MazeEnv):
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
             :,
         ]
-        """
-        The following logic imposes obstructed vision that was more
-        accurate when the maze path was 1 unit wide. Now that we
-        switch to more of an open field style maze, it is no longer
-        applicable.
-        """
-        # mask = np.zeros((9, 9, 3), dtype=bool)
-        # mask[4, :] = True
-        # mask[:, 4] = True
-        # vision[~mask] = 0
-        # leftVision = vision[4, :4, 0].squeeze().flatten()
-        # leftZeroIdx = np.where(leftVision == 0)[0]
-        # rightVision = vision[4, 5:, 0].squeeze().flatten()
-        # rightZeroIdx = np.where(rightVision == 0)[0]
-        # upVision = vision[:4, 4, 0].squeeze().flatten()
-        # upZeroIdx = np.where(upVision == 0)[0]
-        # downVision = vision[5:, 4, 0].squeeze().flatten()
-        # downZeroIdx = np.where(downVision == 0)[0]
-        # if len(leftZeroIdx):
-        #     vision[4, : leftZeroIdx[-1], :] = 0
-        # if len(rightZeroIdx):
-        #     vision[4, 5 + rightZeroIdx[0] :, :] = 0
-        # if len(upZeroIdx):
-        #     vision[: upZeroIdx[-1], 4, :] = 0
-        # if len(downZeroIdx):
-        #     vision[5 + downZeroIdx[0] :, 4, :] = 0
-
-        if self._memoryLen > 1:
-            if not self._memory:
-                self._memory = [vision]
-            else:
-                self._memory.append(vision)
-            if len(self._memory) > self._memoryLen:
-                self._memory.pop(0)
         return vision
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        self._memory = None
-        return super().reset(seed=seed)
 
 
 class PlaceMazeEnv(FoggedMazeEnv):

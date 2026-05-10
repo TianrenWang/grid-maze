@@ -127,7 +127,9 @@ if __name__ == "__main__":
         )
         .training(
             lr=args.lr,
-            entropy_coeff=[[0, 0.1], [8000000, 0.1], [8000001, 0.01]],
+            entropy_coeff=[[0, 0.1], [8000000, 0.1], [8000001, 0.01]]
+            if not args.grid
+            else 0.01,
         )
     )
     if usesGrid():

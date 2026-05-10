@@ -109,6 +109,14 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
+        self.prePredictionHead = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(
+                self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
+                self.linearHiddenSize,
+            ),
+            nn.ReLU(),
+        )
 
     def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():

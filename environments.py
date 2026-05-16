@@ -180,7 +180,7 @@ class FoggedMazeEnv(MazeEnv):
         self._visualRange = config.get("visualRange", 4)
         visualObsSize = self._visualRange * 2 + 1
         self.observation_space = gym.spaces.MultiBinary(
-            (visualObsSize, visualObsSize, 3)
+            (visualObsSize, visualObsSize, 2)
         )
 
     def _getObs(self):
@@ -199,7 +199,7 @@ class FoggedMazeEnv(MazeEnv):
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
             :,
         ]
-        return vision
+        return vision[:, :, :2]
 
 
 class PlaceMazeEnv(FoggedMazeEnv):
@@ -208,7 +208,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+            0, self._mazeSize, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -246,7 +246,7 @@ class SelfLocalizeEnv(PlaceMazeEnv):
             [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
         ]
         self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
+            0, self._mazeSize, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
         )
 
     def step(self, action):

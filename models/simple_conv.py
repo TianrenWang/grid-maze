@@ -2,7 +2,7 @@ import torch.nn as nn
 
 
 class SimpleConv(nn.Module):
-    def __init__(self, hiddenSize: int, inputSize: int = 3):
+    def __init__(self, hiddenSize: int, inputSize: int = 2):
         super().__init__()
         self.convModule = nn.Sequential(
             nn.Conv2d(inputSize, hiddenSize, kernel_size=3, padding=1),

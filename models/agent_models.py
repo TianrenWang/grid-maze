@@ -174,10 +174,10 @@ class PlaceMazeModule(MemoryMazeModule):
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2 * 3
+        visionSize = self.inputSize**2 * 2
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 2]
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
@@ -273,10 +273,10 @@ class GPSModule(MemoryMazeModule):
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2 * 3
+        visionSize = self.inputSize**2 * 2
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 2]
         )
         agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
         agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)

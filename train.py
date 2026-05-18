@@ -10,7 +10,12 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
 from maze import generateMaze, getMazeDebugString
-from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from environments import (
+    MazeEnv,
+    FoggedMazeEnv,
+    PlaceMazeEnv,
+    SelfLocalizeEnv,
+)
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -123,7 +128,7 @@ if __name__ == "__main__":
         .evaluation(
             evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=1 if args.debug else 128,
+            evaluation_duration=1 if args.debug else 24,
         )
         .training(
             lr=args.lr,

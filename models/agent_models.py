@@ -100,7 +100,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeProjector = nn.Sequential(
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
-        self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
+        self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.memoryEncoder = nn.Sequential(
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
@@ -179,13 +179,13 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
-        agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
+        agentLocation = obs[:, :, visionSize + 2 :]
         agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
-        action = obs[:, :, -5:]
-        return vision, lastAgentLocation, agentLocation, action
+        return vision, lastAgentLocation, agentLocation
 
     def _processPreHeads(self, batch, eval: bool = False):
-        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, agentLocation = self._getObsFromBatch(batch)
+        action = agentLocation - lastAgentLocation
         visionFeatures = self._processConvolution(vision)
         prevPlaces = self.placeEncoder(self._calculatePlace(lastAgentLocation)[:, 0, :])
         hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
@@ -216,14 +216,16 @@ class PlaceMazeModule(MemoryMazeModule):
             [visionFeatures, decodedGridWithoutGrad], dim=2
         )
         visionAndGridFeatures = self.memoryEncoder(visionAndGridFeatures)
+        actualPlace = self._calculatePlace(agentLocation)
         return (
             self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
             projectedPlace,
             finalGridState,
+            actualPlace,
         )
 
     def _forward_exploration(self, batch, **kwargs):
-        hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
+        hiddenStates, _, finalGrid, _ = self._processPreHeads(batch, True)
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -237,8 +239,9 @@ class PlaceMazeModule(MemoryMazeModule):
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        _, _, agentLocation, _ = self._getObsFromBatch(batch)
-        hiddenStates, projectedPlace, finalGrid = self._processPreHeads(batch)
+        hiddenStates, projectedPlace, finalGrid, actualPlace = self._processPreHeads(
+            batch
+        )
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -249,16 +252,13 @@ class PlaceMazeModule(MemoryMazeModule):
             },
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": projectedPlace,
-            "placeTarget": self._calculatePlace(agentLocation),
-            "placeCells": self.placeCells.unsqueeze(0)
-            .unsqueeze(0)
-            .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),
+            "placeTarget": actualPlace,
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)
 
 
@@ -286,3 +286,41 @@ class GPSModule(MemoryMazeModule):
         initialHidden = batch[Columns.STATE_IN]["h"].unsqueeze(0)
         visionAndGridFeatures = torch.concat([visionFeatures, agentLocation], dim=2)
         return self.trajectoryMemory(visionAndGridFeatures, initialHidden)
+
+
+class VectorPredictor(nn.Module):
+    def __init__(self, num_hidden):
+        super().__init__()
+        self.speedPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Sigmoid())
+        self.rotationPredictor = nn.Sequential(nn.Linear(num_hidden, 1), nn.Tanh())
+        self.stdLogPredictor = nn.Sequential(nn.Linear(num_hidden, 2))
+
+    def forward(self, logit):
+        speed = self.speedPredictor(logit)
+        rotation = self.rotationPredictor(logit)
+        stglog = self.stdLogPredictor(logit)
+        return torch.concat([speed, rotation, stglog], dim=2)
+
+
+class ContinuousMazeModule(PlaceMazeModule):
+    def setup(self):
+        PlaceMazeModule.setup(self)
+        self.policy_branch = VectorPredictor(self.linearHiddenSize)
+        self.pathIntegrator = nn.LSTM(3, self.integratorSize, batch_first=True)
+        self.visionFeatures = 4
+        self.primaryConvModule = SimpleConv(self.hiddenSize, self.visionFeatures)
+
+    def _getObsFromBatch(self, batch):
+        obs = batch["obs"]
+        visionSize = self.inputSize**2 * self.visionFeatures
+        vision = obs[:, :, :visionSize]
+        vision = torch.reshape(
+            vision,
+            [*vision.shape[:2], self.inputSize, self.inputSize, self.visionFeatures],
+        )
+        lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
+        lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
+        agentLocation = obs[:, :, visionSize + 2 : visionSize + 4]
+        agentLocation = agentLocation.reshape(*agentLocation.shape[:2], 2)
+        action = obs[:, :, -3:]
+        return vision, lastAgentLocation, agentLocation, action

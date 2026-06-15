@@ -9,7 +9,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
-from maze import generateMaze, getMazeDebugString
+from maze import generateMaze, getMazeDebugString, generateMazeWithOfflimit
 from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
@@ -38,6 +38,7 @@ parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", type=str2bool, default=False)
 parser.add_argument("--gps", type=str2bool, default=False)
 parser.add_argument("--latentPath", type=str2bool, default=False)
+parser.add_argument("--offlimit", action="store_true")
 args = parser.parse_args()
 
 
@@ -53,7 +54,9 @@ if __name__ == "__main__":
     mazesPath = "mazes"
     visionRange = 4
 
-    if not args.randomMaze:
+    if args.offlimit:
+        maze = generateMazeWithOfflimit(mazeSize)
+    elif not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)
         mazes = os.listdir(mazesPath)
@@ -91,7 +94,7 @@ if __name__ == "__main__":
         env = MazeEnv
 
     environmentConfig = {
-        "maze": None if args.randomMaze else maze,
+        "maze": maze if maze else None,
         "goal": None if args.fixedStart else goalLocation,
         "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,

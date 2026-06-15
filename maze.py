@@ -55,6 +55,18 @@ def generateMaze(size: int, p_obstacle: float = 0.02):
     return maze
 
 
+def generateMazeWithOfflimit(size: int):
+    maze = [[1 for _ in range(size)] for _ in range(size)]
+    for i in range(size):
+        for j in range(size):
+            if i % 4 == 0 and j % 4 == 0:
+                for x in range(2):
+                    for y in range(2):
+                        if -1 < i + y < size and -1 < j + x < size:
+                            maze[i + y][j + x] = 0
+    return maze
+
+
 def getMazeDebugString(maze):
     mazeString = []
     mazeString.append("".join("." for i in range(len(maze) + 2)))

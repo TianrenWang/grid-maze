@@ -53,9 +53,12 @@ if __name__ == "__main__":
     mazeName = args.mazeName
     mazesPath = "mazes"
     visionRange = 4
+    maze = None
 
     if args.offlimit:
         maze = generateMazeWithOfflimit(mazeSize)
+    elif args.selfLocalize:
+        maze = generateMaze(mazeSize, 0)
     elif not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)

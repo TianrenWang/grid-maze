@@ -252,22 +252,24 @@ class SelfLocalizeEnv(PlaceMazeEnv):
     def step(self, action):
         finalized = False
         availableActions = [0, 1, 2, 3]
+        validAction = None
         while not finalized:
-            availableActions.remove(action)
             if len(availableActions):
                 action = np.random.choice(availableActions, 1)[0]
             else:
                 finalized = True
             direction = self._action_to_direction[action]
             newLoc = self._agentLocation + direction
-            if (
-                self.isValidLocation(newLoc)
-                and self._visitCounts[newLoc[0]][newLoc[1]] < 3
-            ):
-                finalized = True
+            if self.isValidLocation(newLoc):
+                validAction = action
+                if self._visitCounts[newLoc[0]][newLoc[1]] < 3:
+                    finalized = True
+
+            if not finalized:
+                availableActions.remove(action)
 
         self._lastLocation = self._agentLocation
-        self._lastAction = action
-        stepOutput = super().step(action)
+        self._lastAction = validAction
+        stepOutput = super().step(validAction)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
         return stepOutput

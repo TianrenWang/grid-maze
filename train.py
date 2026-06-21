@@ -168,10 +168,15 @@ if __name__ == "__main__":
                         result["learners"]["default_policy"]["prediction_error"], 2
                     )
                     print("Prediction Error:", predictionError)
-                    positionError = np.round(
-                        result["learners"]["default_policy"]["position_error"], 2
+                    placePositionError = np.round(
+                        result["learners"]["default_policy"]["place_position_error"], 2
                     )
-                    print("Position Error:", positionError)
+                    print("Place Position Error:", placePositionError)
+                    absPositionError = np.round(
+                        result["learners"]["default_policy"]["absolute_position_error"],
+                        2,
+                    )
+                    print("Absolute Position Error:", absPositionError)
                     if args.latentPath:
                         reconstructionLoss = np.round(
                             result["learners"]["default_policy"]["reconstruction_loss"],

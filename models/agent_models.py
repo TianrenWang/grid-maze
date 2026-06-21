@@ -117,6 +117,14 @@ class PlaceMazeModule(MemoryMazeModule):
             ),
             nn.ReLU(),
         )
+        self.coordinateDecoder = nn.Sequential(
+            nn.Linear(self.gridSize, self.hiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.hiddenSize, self.hiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.hiddenSize, 2),
+            nn.Sigmoid(),
+        )
 
     def _calculatePlace(self, agentLocation: torch.Tensor):
         with torch.no_grad():
@@ -212,6 +220,7 @@ class PlaceMazeModule(MemoryMazeModule):
         projectedPlace = self.placeProjector(decodedGrid)
         with torch.no_grad():
             decodedGridWithoutGrad = torch.Tensor(decodedGrid)
+        coordinateReadout = self.coordinateDecoder(decodedGridWithoutGrad)
         visionAndGridFeatures = torch.concat(
             [visionFeatures, decodedGridWithoutGrad], dim=2
         )
@@ -220,10 +229,11 @@ class PlaceMazeModule(MemoryMazeModule):
             self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
             projectedPlace,
             finalGridState,
+            coordinateReadout,
         )
 
     def _forward_exploration(self, batch, **kwargs):
-        hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
+        hiddenStates, _, finalGrid, _ = self._processPreHeads(batch, True)
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -238,7 +248,9 @@ class PlaceMazeModule(MemoryMazeModule):
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         _, _, agentLocation, _ = self._getObsFromBatch(batch)
-        hiddenStates, projectedPlace, finalGrid = self._processPreHeads(batch)
+        hiddenStates, projectedPlace, finalGrid, coordinateReadout = (
+            self._processPreHeads(batch)
+        )
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -253,12 +265,14 @@ class PlaceMazeModule(MemoryMazeModule):
             "placeCells": self.placeCells.unsqueeze(0)
             .unsqueeze(0)
             .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),
+            "predictedCoordinates": coordinateReadout,
+            "targetCoordinates": agentLocation,
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)
 
 

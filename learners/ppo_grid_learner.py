@@ -29,6 +29,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             lossMask = batch["loss_mask"]
             placeLogit = fwd_out["placeLogit"][lossMask]
             placeTarget = fwd_out["placeTarget"][lossMask]
+            predictedCoordinates = fwd_out["predictedCoordinates"][lossMask]
+            targetCoordinates = fwd_out["targetCoordinates"][lossMask]
             predictions = torch.nn.functional.softmax(placeLogit, -1)
             placeLoss = torch.nn.functional.cross_entropy(
                 placeLogit.flatten(0, 1), placeTarget.flatten(0, 1)
@@ -59,16 +61,23 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 )
                 loss += reconstructionLoss
 
-            positionError = torch.mean(
-                torch.sqrt(
-                    torch.sum(
-                        (decodedPredictedPositions - decodedActualPositions) ** 2, -1
-                    )
-                )
+            coordinatesLoss = torch.nn.functional.mse_loss(
+                predictedCoordinates, targetCoordinates
+            )
+            placePositionError = torch.mean(
+                torch.norm(decodedPredictedPositions - decodedActualPositions, dim=-1)
+            )
+            coordinateError = torch.mean(
+                torch.norm(predictedCoordinates - targetCoordinates, dim=-1)
             )
             self.metrics.log_value(
-                key=(module_id, "position_error"),
-                value=positionError.cpu().detach().numpy(),
+                key=(module_id, "place_position_error"),
+                value=placePositionError.cpu().detach().numpy(),
+                window=100,
+            )
+            self.metrics.log_value(
+                key=(module_id, "absolute_position_error"),
+                value=coordinateError.cpu().detach().numpy(),
                 window=100,
             )
             predictionError = torch.mean(
@@ -87,7 +96,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             #     value=placeBias.cpu().detach().numpy(),
             #     window=100,
             # )
-            loss += placeLoss
+            loss += placeLoss + coordinatesLoss
             return loss
         else:
             return super().compute_loss_for_module(

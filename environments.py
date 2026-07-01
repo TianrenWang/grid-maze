@@ -1,6 +1,8 @@
 from typing import Optional
+from collections import deque
 import numpy as np
 import gymnasium as gym
+import random
 
 from maze import getMazeDebugString, generateMaze
 
@@ -248,28 +250,48 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         self.observation_space = gym.spaces.Box(
             0, self._mazeSize, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
         )
+        self.previousActions = None
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed)
+        self.previousActions = deque()
+        return self._getObs(), self._get_info()
 
     def step(self, action):
-        finalized = False
         availableActions = [0, 1, 2, 3]
-        validAction = None
-        while not finalized:
-            if len(availableActions):
-                action = np.random.choice(availableActions, 1)[0]
-            else:
-                finalized = True
-            direction = self._action_to_direction[action]
+        np.random.shuffle(availableActions)
+
+        candidates = []
+
+        for a in availableActions:
+            direction = self._action_to_direction[a]
             newLoc = self._agentLocation + direction
             if self.isValidLocation(newLoc):
-                validAction = action
-                if self._visitCounts[newLoc[0]][newLoc[1]] < 3:
-                    finalized = True
+                visit_count = self._visitCounts[newLoc[0]][newLoc[1]]
+                candidates.append((visit_count, a))
 
-            if not finalized:
-                availableActions.remove(action)
+        for i in range(len(candidates)):
+            candidate = candidates[i]
+            candidateAction = candidate[1]
+            if (
+                candidateAction == 0
+                and 2 in self.previousActions
+                or candidateAction == 1
+                and 3 in self.previousActions
+                or candidateAction == 2
+                and 0 in self.previousActions
+                or candidateAction == 3
+                and 1 in self.previousActions
+            ):
+                candidates[i] = (random.randrange(9000, 9999), candidateAction)
+
+        _, best_action = min(candidates, key=lambda x: x[0])
 
         self._lastLocation = self._agentLocation
-        self._lastAction = validAction
-        stepOutput = super().step(validAction)
+        self._lastAction = best_action
+        stepOutput = super().step(best_action)
         self._visitCounts[self._agentLocation[0]][self._agentLocation[1]] += 1
+        self.previousActions.append(best_action)
+        if len(self.previousActions) > 3:
+            self.previousActions.popleft()
         return stepOutput

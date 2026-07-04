@@ -114,13 +114,10 @@ class MemoryMazeWithInitialPlaceModule(MemoryMazeModule):
         prevPlaces = self.placeEncoder(
             calculatePlace(self.placeCells, lastAgentLocation)[:, 0, :]
         )
-        if self.training:
-            initialHidden = prevPlaces
-        else:
-            initialPlaceMask = torch.sum(initialHidden, 1) == 0
-            initialHidden = torch.where(
-                initialPlaceMask[:, None], prevPlaces, initialHidden
-            )
+        initialPlaceMask = torch.sum(initialHidden, 1) == 0
+        initialHidden = torch.where(
+            initialPlaceMask[:, None], prevPlaces, initialHidden
+        )
         visionFeatures = self._processConvolution(vision)
         return self.trajectoryMemory(visionFeatures, initialHidden.unsqueeze(0))
 

@@ -7,6 +7,7 @@ from ray.rllib.core.rl_module.apis import ValueFunctionAPI
 from ray.rllib.utils.annotations import override
 
 from .simple_conv import SimpleConv
+from .utils import calculatePlace
 
 
 class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
@@ -105,7 +106,6 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
         )
-        self.initialStates = nn.Embedding(2, self.integratorSize)
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
@@ -117,20 +117,6 @@ class PlaceMazeModule(MemoryMazeModule):
             ),
             nn.ReLU(),
         )
-
-    def _calculatePlace(self, agentLocation: torch.Tensor):
-        with torch.no_grad():
-            agentLocationShape = agentLocation.shape
-            agentLocation = agentLocation.flatten(0, -2)
-            diff = agentLocation.unsqueeze(1) - self.placeCells.unsqueeze(0)
-            dists_squared = torch.sum(torch.abs(diff) ** 2, dim=-1)
-            unnormalized_activations = -dists_squared / (2 * self.fieldSize**2)
-            normalized_activations = torch.nn.functional.softmax(
-                unnormalized_activations, dim=1
-            )
-            return normalized_activations.reshape(
-                [*agentLocationShape[:2], self.numPlaceCells]
-            )
 
     """
     Following code is used to figure out how dramatically place code can change
@@ -184,20 +170,22 @@ class PlaceMazeModule(MemoryMazeModule):
         action = obs[:, :, -5:]
         return vision, lastAgentLocation, agentLocation, action
 
-    def _processPreHeads(self, batch, eval: bool = False):
+    def _processPreHeads(self, batch):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         visionFeatures = self._processConvolution(vision)
-        prevPlaces = self.placeEncoder(self._calculatePlace(lastAgentLocation)[:, 0, :])
+        prevPlaces = self.placeEncoder(
+            calculatePlace(self.placeCells, lastAgentLocation)[:, 0, :]
+        )
         hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
         candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
-        if eval:
+        if not self.training:
             hiddenPlace = hiddenGrid
             candidatePlace = candidateGrid
             hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
             candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
             initialPlaceMask = torch.sum(hiddenGrid, 1) == 0
             randomPlaceMask = (
-                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0.05
+                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0
             )
             placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
                 :, None
@@ -223,7 +211,7 @@ class PlaceMazeModule(MemoryMazeModule):
         )
 
     def _forward_exploration(self, batch, **kwargs):
-        hiddenStates, _, finalGrid = self._processPreHeads(batch, True)
+        hiddenStates, _, finalGrid = self._processPreHeads(batch)
         policy = self.policy_branch(hiddenStates)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -249,7 +237,7 @@ class PlaceMazeModule(MemoryMazeModule):
             },
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": projectedPlace,
-            "placeTarget": self._calculatePlace(agentLocation),
+            "placeTarget": calculatePlace(self.placeCells, agentLocation),
             "placeCells": self.placeCells.unsqueeze(0)
             .unsqueeze(0)
             .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),

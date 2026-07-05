@@ -81,7 +81,7 @@ if __name__ == "__main__":
     elif args.gps:
         module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
-        module = models.MemoryMazeModule
+        module = models.PlaceCellControlModule
     else:
         module = models.SimpleMazeModule
 
@@ -89,10 +89,8 @@ if __name__ == "__main__":
         env = FoggedMazeEnv
     elif args.selfLocalize:
         env = SelfLocalizeEnv
-    elif args.grid or args.gps:
+    elif args.grid or args.gps or args.fogged:
         env = PlaceMazeEnv
-    elif args.fogged:
-        env = FoggedMazeEnv
     else:
         env = MazeEnv
 

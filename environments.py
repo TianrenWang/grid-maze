@@ -230,8 +230,8 @@ class PlaceMazeEnv(FoggedMazeEnv):
         return np.concatenate(
             [
                 vision.flatten(),
-                self._lastLocation / (self._mazeSize - 1),
-                self._agentLocation / (self._mazeSize - 1),
+                self._lastLocation / self._mazeSize,
+                self._agentLocation / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,

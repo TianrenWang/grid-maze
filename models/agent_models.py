@@ -90,38 +90,6 @@ class MemoryMazeModule(SimpleMazeModule):
         return self.value_branch(self._processPreHeads(batch)[0]).squeeze(-1)
 
 
-class MemoryMazeWithInitialPlaceModule(MemoryMazeModule):
-    def setup(self):
-        MemoryMazeModule.setup(self)
-        self.numPlaceCells = self.model_config.get("numPlaceCells", 32)
-        self.placeEncoder = nn.Linear(self.numPlaceCells, self.linearHiddenSize)
-        self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
-
-    def _getObsFromBatch(self, batch):
-        obs = batch["obs"]
-        visionSize = self.inputSize**2 * 2
-        vision = obs[:, :, :visionSize]
-        vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 2]
-        )
-        lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
-        lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)
-        return vision, lastAgentLocation
-
-    def _processPreHeads(self, batch):
-        initialHidden: torch.Tensor = batch[Columns.STATE_IN]["hiddenObs"]
-        vision, lastAgentLocation = self._getObsFromBatch(batch)
-        prevPlaces = self.placeEncoder(
-            calculatePlace(self.placeCells, lastAgentLocation)[:, 0, :]
-        )
-        initialPlaceMask = torch.sum(initialHidden, 1) == 0
-        initialHidden = torch.where(
-            initialPlaceMask[:, None], prevPlaces, initialHidden
-        )
-        visionFeatures = self._processConvolution(vision)
-        return self.trajectoryMemory(visionFeatures, initialHidden.unsqueeze(0))
-
-
 class PlaceMazeModule(MemoryMazeModule):
     def setup(self):
         MemoryMazeModule.setup(self)

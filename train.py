@@ -81,7 +81,7 @@ if __name__ == "__main__":
     elif args.gps:
         module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
-        module = models.MemoryMazeWithInitialPlaceModule
+        module = models.PlaceCellControlModule
     else:
         module = models.SimpleMazeModule
 

@@ -258,6 +258,16 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         return self._getObs(), self._get_info()
 
     def step(self, action):
+        """
+        Overrides the action. Forces agent to move in a directional manner that doesn't
+        end in jitter. It follows the following heuristics ranked by priority:
+        1. Must not run into walls (prevent nullified movement)
+        2. It cannot move in the opposite direction of any actions it made in the last
+        three moves.
+        3. Always selects a direction that would lead to the least number of visited
+        position.
+        4. In case of a tie, randomly chooses amongst the tied choices uniformly.
+        """
         availableActions = [0, 1, 2, 3]
         np.random.shuffle(availableActions)
 

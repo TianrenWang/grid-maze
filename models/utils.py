@@ -13,7 +13,7 @@ def calculatePlace(
         agentLocation = agentLocation.flatten(0, -2)
         diff = agentLocation.unsqueeze(1) - placeCells.unsqueeze(0)
         dists_squared = torch.sum(torch.abs(diff) ** 2, dim=-1)
-        unnormalized_activations = -dists_squared / (2 * fieldSize)
+        unnormalized_activations = -dists_squared / (2 * fieldSize**2)
         normalized_activations = torch.nn.functional.softmax(
             unnormalized_activations, dim=1
         )

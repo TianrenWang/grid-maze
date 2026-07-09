@@ -15,14 +15,10 @@ from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
 
-def str2bool(v):
-    return v.lower() in ("yes", "true", "t", "True", "y")
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
-parser.add_argument("--randomMaze", type=str2bool, default=True)
+parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=1000)
@@ -30,20 +26,21 @@ parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=4000)
 parser.add_argument("--evalInterval", type=int, default=100)
-parser.add_argument("--fixedStart", type=str2bool, default=False)
-parser.add_argument("--fogged", type=str2bool, default=True)
-parser.add_argument("--grid", type=str2bool, default=False)
-parser.add_argument("--selfLocalize", type=str2bool, default=False)
+parser.add_argument("--fixedStart", action="store_true")
+parser.add_argument("--noFog", action="store_false", dest="fogged")
+parser.add_argument("--grid", action="store_true")
+parser.add_argument("--selfLocalize", action="store_true")
 parser.add_argument("--memoryLen", type=int, default=20)
-parser.add_argument("--debug", type=str2bool, default=False)
-parser.add_argument("--gps", type=str2bool, default=False)
-parser.add_argument("--latentPath", type=str2bool, default=False)
+parser.add_argument("--debug", action="store_true")
+parser.add_argument("--gps", action="store_true")
+parser.add_argument("--latentPath", action="store_true")
 parser.add_argument("--offlimit", action="store_true")
+parser.add_argument("--pureCode", action="store_true")
 args = parser.parse_args()
 
 
 def usesGrid():
-    return args.grid or args.selfLocalize or args.latentPath
+    return args.grid or args.selfLocalize or args.latentPath or args.pureCode
 
 
 if __name__ == "__main__":
@@ -78,6 +75,8 @@ if __name__ == "__main__":
         module = models.PlaceMazeModule
         if args.latentPath:
             module = models.LatentPathModule
+        elif args.pureCode:
+            module = models.PureCodeModule
     elif args.gps:
         module = models.GPSModule
     elif args.memoryLen > 1 and args.fogged:
@@ -155,7 +154,7 @@ if __name__ == "__main__":
         numSamples = 1
         for i in range(args.numLearn):
             result = agent.train()
-            if i % args.evalInterval == 0:
+            if i == 0 or (i + 1) % args.evalInterval == 0:
                 print(
                     f"Iteration {i + 1}",
                     " - ",

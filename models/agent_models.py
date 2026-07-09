@@ -109,14 +109,6 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
-        self.prePredictionHead = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(
-                self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
-                self.linearHiddenSize,
-            ),
-            nn.ReLU(),
-        )
 
     """
     Following code is used to figure out how dramatically place code can change
@@ -170,39 +162,56 @@ class PlaceMazeModule(MemoryMazeModule):
         action = obs[:, :, -5:]
         return vision, lastAgentLocation, agentLocation, action
 
-    def _processPreHeads(self, batch):
-        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
-        visionFeatures = self._processConvolution(vision)
+    def _pathIntegrate(
+        self,
+        lastAgentLocation: torch.Tensor,
+        action: torch.Tensor,
+        hiddenGrid: torch.Tensor,
+        candidateGrid: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         prevPlaces = self.placeEncoder(
             calculatePlace(self.placeCells, lastAgentLocation)[:, 0, :]
         )
-        hiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
-        candidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
+        actualHiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
+        actualCandidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
         if not self.training:
-            hiddenPlace = hiddenGrid
-            candidatePlace = candidateGrid
-            hiddenGrid = batch[Columns.STATE_IN]["hiddenGrid"]
-            candidateGrid = batch[Columns.STATE_IN]["candidateGrid"]
-            initialPlaceMask = torch.sum(hiddenGrid, 1) == 0
+            hiddenPlace = actualHiddenGrid
+            candidatePlace = actualCandidateGrid
+            actualHiddenGrid = hiddenGrid
+            actualCandidateGrid = candidateGrid
+            initialPlaceMask = torch.sum(actualHiddenGrid, 1) == 0
             randomPlaceMask = (
                 torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0
             )
             placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
                 :, None
             ]
-            hiddenGrid = torch.where(placeMask, hiddenPlace, hiddenGrid)
-            candidateGrid = torch.where(placeMask, candidatePlace, candidateGrid)
+            actualHiddenGrid = torch.where(placeMask, hiddenPlace, actualHiddenGrid)
+            actualCandidateGrid = torch.where(
+                placeMask, candidatePlace, actualCandidateGrid
+            )
         gridStates, finalGridState = self.pathIntegrator(
-            action, (hiddenGrid.unsqueeze(0), candidateGrid.unsqueeze(0))
+            action, (actualHiddenGrid.unsqueeze(0), actualCandidateGrid.unsqueeze(0))
         )
-        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
-        decodedGrid = self.gridDecoder(gridStates)
+        decodedGrid = self.gridDecoder.forward(gridStates)
         projectedPlace = self.placeProjector(decodedGrid)
-        with torch.no_grad():
-            decodedGridWithoutGrad = torch.Tensor(decodedGrid)
-        visionAndGridFeatures = torch.concat(
-            [visionFeatures, decodedGridWithoutGrad], dim=2
+        return (
+            decodedGrid.detach(),
+            projectedPlace,
+            finalGridState,
         )
+
+    def _processPreHeads(self, batch):
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
+        gridCodes, projectedPlace, finalGridState = self._pathIntegrate(
+            lastAgentLocation,
+            action,
+            batch[Columns.STATE_IN]["hiddenGrid"],
+            batch[Columns.STATE_IN]["candidateGrid"],
+        )
+        visionFeatures = self._processConvolution(vision)
+        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
+        visionAndGridFeatures = torch.concat([visionFeatures, gridCodes], dim=2)
         visionAndGridFeatures = self.memoryEncoder(visionAndGridFeatures)
         return (
             self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],

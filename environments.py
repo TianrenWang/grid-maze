@@ -12,8 +12,9 @@ class MazeEnv(gym.Env):
         self._episode_len = 0
         self._mazeArray = config.get("maze", None)
         self._mazeSize = config.get("mazeSize", None)
+        self._actualMazeSize = self._mazeSize * 2
         self._randomMaze = not self._mazeArray
-        self._goalLocation = config.get("goal", None)
+        self._goalLocation = [self._mazeSize, self._mazeSize]
         self._fixedGoal = bool(self._goalLocation)
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
@@ -58,26 +59,18 @@ class MazeEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         if self._randomMaze:
-            self._mazeArray = generateMaze(self._mazeSize)
+            self._mazeArray = generateMaze(self._actualMazeSize)
 
         mazeSize = len(self._mazeArray)
-        if not self._fixedGoal:
-            goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
-            while (
-                not self._mazeArray[goalLocation[0]][goalLocation[1]]
-                or goalLocation[0] == mazeSize // 2
-                and goalLocation[1] == mazeSize // 2
-            ):
-                goalLocation = self.np_random.integers(0, mazeSize, size=2, dtype=int)
-            self._goalLocation = goalLocation
 
         targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
             allLocations = []
-            for i in range(self._mazeSize):
-                for j in range(self._mazeSize):
+            _range = range(self._mazeSize // 2, self._mazeSize // 2 + self._mazeSize)
+            for i in _range:
+                for j in _range:
                     allLocations.append((i, j))
             np.random.shuffle(allLocations)
             agentLocation = np.array(allLocations.pop())
@@ -98,10 +91,10 @@ class MazeEnv(gym.Env):
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
 
         self._mazeTracker = []
-        for i in range(self._mazeSize):
+        for i in range(self._actualMazeSize):
             currentRow = []
             self._mazeTracker.append(currentRow)
-            for j in range(self._mazeSize):
+            for j in range(self._actualMazeSize):
                 originalValue = self._mazeArray[i][j]
                 if not originalValue:
                     currentRow.append("X")
@@ -163,10 +156,11 @@ class MazeEnv(gym.Env):
 
     def render(self):
         renderOutput = [
-            [i for i in range(self._mazeSize)] for j in range(self._mazeSize)
+            [i for i in range(self._actualMazeSize)]
+            for j in range(self._actualMazeSize)
         ]
-        for i in range(self._mazeSize):
-            for j in range(self._mazeSize):
+        for i in range(self._actualMazeSize):
+            for j in range(self._actualMazeSize):
                 if not self._mazeTracker[i][j]:
                     renderOutput[i][j] = " "
                 else:
@@ -228,8 +222,8 @@ class PlaceMazeEnv(FoggedMazeEnv):
         return np.concatenate(
             [
                 vision.flatten(),
-                self._lastLocation / self._mazeSize,
-                self._agentLocation / self._mazeSize,
+                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
+                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,
@@ -243,10 +237,11 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         self._lastLocation = self._agentLocation
         self._lastAction = np.random.randint(0, 4)
         self._visitCounts = [
-            [0 for j in range(self._mazeSize)] for i in range(self._mazeSize)
+            [0 for j in range(self._actualMazeSize)]
+            for i in range(self._actualMazeSize)
         ]
         self.observation_space = gym.spaces.Box(
-            0, self._mazeSize, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
+            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
         )
         self.previousActions = None
 

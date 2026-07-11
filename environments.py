@@ -77,9 +77,7 @@ class MazeEnv(gym.Env):
             goalDiff = np.abs(agentLocation - self._goalLocation)
             isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             while len(allLocations) and (
-                np.array_equal(agentLocation, self._goalLocation)
-                or not self._mazeArray[agentLocation[0]][agentLocation[1]]
-                or isCloseToGoal
+                np.array_equal(agentLocation, self._goalLocation) or isCloseToGoal
             ):
                 agentLocation = np.array(allLocations.pop())
                 goalDiff = np.abs(agentLocation - self._goalLocation)
@@ -114,10 +112,8 @@ class MazeEnv(gym.Env):
         return self._getObs(), self._get_info()
 
     def isValidLocation(self, location: np.ndarray):
-        return (
-            0 <= location[0] < len(self._mazeArray)
-            and 0 <= location[1] < len(self._mazeArray)
-            and self._map[location[0], location[1], 0] == 1
+        return 0 <= location[0] < len(self._mazeArray) and 0 <= location[1] < len(
+            self._mazeArray
         )
 
     def step(self, action):
@@ -143,11 +139,14 @@ class MazeEnv(gym.Env):
         else:
             reward = 0
 
-        agentLocationValue = self._mazeTracker[self._agentLocation[0]][
-            self._agentLocation[1]
-        ]
-        if isinstance(agentLocationValue, int) and agentLocationValue < 9:
-            self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] += 1
+        row = self._agentLocation[0]
+        column = self._agentLocation[1]
+        agentLocationValue = self._mazeTracker[row][column]
+        if agentLocationValue == "X":
+            self._mazeTracker[row][column] = 1
+        elif isinstance(agentLocationValue, int) and agentLocationValue < 9:
+            self._mazeTracker[row][column] += 1
+
         if (terminated or truncated) and self._debugging:
             print("Steps:", self._episode_len)
             print("Shortest:", self._shortestDistance)

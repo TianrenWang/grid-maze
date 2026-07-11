@@ -145,9 +145,7 @@ class MazeEnv(gym.Env):
             if self._episode_len > 100:
                 reward = 0.1
             else:
-                closenessFactor = 1 - (self._episode_len - self._shortestDistance) / (
-                    100 - self._shortestDistance
-                )
+                closenessFactor = 1 - self._episode_len / 100
                 reward = 0.1 + closenessFactor**2
         else:
             reward = 0

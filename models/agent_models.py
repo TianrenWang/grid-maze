@@ -170,7 +170,7 @@ class PlaceMazeModule(MemoryMazeModule):
         candidateGrid: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         prevPlaces = self.placeEncoder(
-            calculatePlace(self.placeCells, lastAgentLocation)[:, 0, :]
+            calculatePlace(self.placeCells, lastAgentLocation, self.fieldSize)[:, 0, :]
         )
         actualHiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
         actualCandidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
@@ -246,7 +246,9 @@ class PlaceMazeModule(MemoryMazeModule):
             },
             Columns.EMBEDDINGS: hiddenStates,
             "placeLogit": projectedPlace,
-            "placeTarget": calculatePlace(self.placeCells, agentLocation),
+            "placeTarget": calculatePlace(
+                self.placeCells, agentLocation, self.fieldSize
+            ),
             "placeCells": self.placeCells.unsqueeze(0)
             .unsqueeze(0)
             .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),

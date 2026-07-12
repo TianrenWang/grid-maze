@@ -1,14 +1,13 @@
 import torch
-import math
 
 
 def calculatePlace(
     placeCells: torch.Tensor,
     agentLocation: torch.Tensor,
-    numPlaceCells: int = 32,
-    fieldSize: float = 0.3 / math.sqrt(32),
+    fieldSize: float = 0.06,
 ):
     with torch.no_grad():
+        numPlaceCells = placeCells.shape[0]
         agentLocationShape = agentLocation.shape
         agentLocation = agentLocation.flatten(0, -2)
         diff = agentLocation.unsqueeze(1) - placeCells.unsqueeze(0)

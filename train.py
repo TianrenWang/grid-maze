@@ -53,16 +53,7 @@ if __name__ == "__main__":
     if args.offlimit:
         maze = generateMazeWithOfflimit(mazeSize)
     elif args.selfLocalize:
-        maze = generateMaze(mazeSize * 2, 0)
-        for i in range(len(maze)):
-            for j in range(len(maze[0])):
-                if (
-                    mazeSize // 2 + mazeSize < i
-                    or i < mazeSize // 2
-                    or mazeSize // 2 + mazeSize < j
-                    or j < mazeSize // 2
-                ):
-                    maze[i][j] = 0
+        maze = generateMaze(mazeSize, 0)
     elif not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)

@@ -102,9 +102,15 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Dropout(), nn.Linear(self.gridSize, self.numPlaceCells)
         )
         self.pathIntegrator = nn.LSTM(5, self.integratorSize, batch_first=True)
-        self.memoryEncoder = nn.Sequential(
-            nn.Linear(self.linearHiddenSize + self.gridSize, self.linearHiddenSize),
+        self.gridCompressor = nn.Sequential(
+            nn.Linear(self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
+        )
+        self.gridGate = nn.Sequential(
+            nn.Linear(self.linearHiddenSize, self.linearHiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.linearHiddenSize, self.linearHiddenSize),
+            nn.Sigmoid(),
         )
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
@@ -211,17 +217,19 @@ class PlaceMazeModule(MemoryMazeModule):
         )
         visionFeatures = self._processConvolution(vision)
         initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
-        visionAndGridFeatures = torch.concat([visionFeatures, gridCodes], dim=2)
-        visionAndGridFeatures = self.memoryEncoder(visionAndGridFeatures)
+        memory = self.trajectoryMemory(visionFeatures, initialHidden)[0]
+        gate = self.gridGate(memory)
+        policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
         return (
-            self.trajectoryMemory(visionAndGridFeatures, initialHidden)[0],
+            policyInput,
+            memory,
             projectedPlace,
             finalGridState,
         )
 
     def _forward_exploration(self, batch, **kwargs):
-        hiddenStates, _, finalGrid = self._processPreHeads(batch)
-        policy = self.policy_branch(hiddenStates)
+        policyInput, hiddenStates, _, finalGrid = self._processPreHeads(batch)
+        policy = self.policy_branch(policyInput)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
@@ -235,8 +243,10 @@ class PlaceMazeModule(MemoryMazeModule):
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         _, _, agentLocation, _ = self._getObsFromBatch(batch)
-        hiddenStates, projectedPlace, finalGrid = self._processPreHeads(batch)
-        policy = self.policy_branch(hiddenStates)
+        policyInput, hiddenStates, projectedPlace, finalGrid = self._processPreHeads(
+            batch
+        )
+        policy = self.policy_branch(policyInput)
         return {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
@@ -257,7 +267,7 @@ class PlaceMazeModule(MemoryMazeModule):
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)
 
 

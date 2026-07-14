@@ -187,7 +187,7 @@ class PlaceMazeModule(MemoryMazeModule):
             actualCandidateGrid = candidateGrid
             initialPlaceMask = torch.sum(actualHiddenGrid, 1) == 0
             randomPlaceMask = (
-                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0
+                torch.rand(initialPlaceMask.shape, dtype=torch.float32) < 0.05
             )
             placeMask = torch.where(randomPlaceMask, randomPlaceMask, initialPlaceMask)[
                 :, None

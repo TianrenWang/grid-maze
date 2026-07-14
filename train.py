@@ -45,8 +45,6 @@ def usesGrid():
 
 if __name__ == "__main__":
     mazeSize = args.mazeSize
-    mazeDimension = (mazeSize, mazeSize)
-    goalLocation = (mazeSize // 2, mazeSize // 2)
     mazeName = args.mazeName
     mazesPath = "mazes"
     visionRange = 4
@@ -95,7 +93,6 @@ if __name__ == "__main__":
 
     environmentConfig = {
         "maze": maze if maze else None,
-        "goal": None if args.fixedStart else goalLocation,
         "start": [mazeSize // 2, mazeSize // 2] if args.fixedStart else None,
         "maxSteps": args.maxSteps,
         "memoryLen": args.memoryLen,

@@ -51,9 +51,10 @@ requests==2.32.3
 rpds-py==0.23.1
 scipy==1.17.1
 six==1.17.0
-sympy==1.13.1
+sympy==1.14.0
 tensorboardX==2.6.2.2
-torch==2.6.0
+torch==2.13.0
+torchvision==0.28.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2025.1

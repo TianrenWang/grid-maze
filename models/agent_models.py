@@ -215,11 +215,19 @@ class PlaceMazeModule(MemoryMazeModule):
             batch[Columns.STATE_IN]["hiddenGrid"],
             batch[Columns.STATE_IN]["candidateGrid"],
         )
-        visionFeatures = self._processConvolution(vision)
-        initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
-        memory = self.trajectoryMemory(visionFeatures, initialHidden)[0]
-        gate = self.gridGate(memory)
-        policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
+        if self.model_config.get("self_localize", False):
+            policyShape = [*gridCodes.shape[:2], self.linearHiddenSize]
+            policyInput = torch.randn(
+                policyShape, dtype=gridCodes.dtype, device=gridCodes.device
+            )
+            memory = policyInput
+        else:
+            visionFeatures = self._processConvolution(vision)
+            initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
+            memory = self.trajectoryMemory(visionFeatures, initialHidden)[0]
+            gate = self.gridGate(memory)
+            policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
+
         return (
             policyInput,
             memory,

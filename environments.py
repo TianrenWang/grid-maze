@@ -276,7 +276,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
             [
                 vision.flatten(),
                 (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
-                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
+                (self._agentLocation - self._mazeSize // 2) / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,
@@ -311,7 +311,7 @@ class SelfLocalizeEnv(PlaceMazeEnv):
             [
                 obs[: visualObsSize**2 * 2],
                 self._lastLocation / self._mazeSize,
-                self._lastLocation / self._mazeSize,
+                self._agentLocation / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,

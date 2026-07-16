@@ -22,4 +22,4 @@ class PureCodeModule(PlaceMazeModule):
             batch[Columns.STATE_IN]["candidateGrid"],
         )
         policyInput = self.prePolicyEncoder(gridCodes)
-        return policyInput, projectedPlace, finalGridState
+        return policyInput, policyInput, projectedPlace, finalGridState

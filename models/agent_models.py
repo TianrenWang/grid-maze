@@ -109,7 +109,7 @@ class PlaceMazeModule(MemoryMazeModule):
         self.gridGate = nn.Sequential(
             nn.Linear(self.linearHiddenSize, self.linearHiddenSize),
             nn.ReLU(),
-            nn.Linear(self.linearHiddenSize, self.linearHiddenSize),
+            nn.Linear(self.linearHiddenSize, 1),
             nn.Sigmoid(),
         )
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)

@@ -225,7 +225,7 @@ class PlaceMazeModule(MemoryMazeModule):
             visionFeatures = self._processConvolution(vision)
             initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
             memory = self.trajectoryMemory(visionFeatures, initialHidden)[0]
-            gate = self.gridGate(memory)
+            gate = self.gridGate(memory.detach())
             policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
 
         return (

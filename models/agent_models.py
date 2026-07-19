@@ -202,10 +202,10 @@ class PlaceMazeModule(MemoryMazeModule):
         integratedStates, finalIntegrationState = self.pathIntegrator(
             action, (actualHiddenGrid.unsqueeze(0), actualCandidateGrid.unsqueeze(0))
         )
-        decodedCode = self.gridDecoder.forward(integratedStates)
-        projectedPlace = self.placeProjector(decodedCode)
+        integratedCode = self.gridDecoder.forward(integratedStates)
+        projectedPlace = self.placeProjector(integratedCode)
         return (
-            decodedCode.detach(),
+            integratedCode.detach(),
             projectedPlace,
             finalIntegrationState,
         )

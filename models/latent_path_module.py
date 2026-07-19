@@ -59,7 +59,7 @@ class LatentPathModule(PlaceMazeModule):
                 torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
             )
             movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
-            gridCodes, predictedPlaces, finalGridState = getIntegration(
+            integratedCode, predictedPlaces, finalGridState = getIntegration(
                 sequenceProjections[:, 0, :], movements
             )
             actualPlaces = calculatePlace(
@@ -74,9 +74,11 @@ class LatentPathModule(PlaceMazeModule):
         elif self.model_config.get("pretraining", False):
             policyInput = memory
         else:
-            gridCodes, _, _ = getIntegration()
+            integratedCode, _, _ = getIntegration()
             gate = self.gridGate(memory.detach())
-            policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
+            policyInput = (
+                memory * (1 - gate) + self.gridCompressor(integratedCode) * gate
+            )
 
         return (
             policyInput,

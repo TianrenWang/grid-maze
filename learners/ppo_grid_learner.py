@@ -63,9 +63,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]
                 distances = torch.linalg.norm(movements, dim=1)
-                idealMovement = 1 / 30
+                idealDistance = 1 / 30
                 movement_loss = torch.mean(
-                    ((distances - idealMovement) / idealMovement) ** 2
+                    ((distances - idealDistance) / idealDistance) ** 2
                 )
                 loss += movement_loss
                 self.metrics.log_value(

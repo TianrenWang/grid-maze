@@ -62,11 +62,9 @@ class LatentPathModule(PlaceMazeModule):
             gridCodes, predictedPlaces, finalGridState = getIntegration(
                 sequenceProjections[:, 0, :], movements
             )
-            accummulatedMovements = torch.cumsum(movements, dim=1)
-            actualPositions = (
-                sequenceProjections[:, 0, :][:, None, :] + accummulatedMovements
+            actualPlaces = calculatePlace(
+                self.placeCells, sequenceProjections[:, 1:, :]
             )
-            actualPlaces = calculatePlace(self.placeCells, actualPositions)
             """
             Doesn't make any sense to path integrate using artificially generated moves
             because the abstract tasks downstream won't have access to a convenient

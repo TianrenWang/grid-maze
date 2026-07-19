@@ -58,6 +58,7 @@ class LatentPathModule(PlaceMazeModule):
             sequenceProjections, reconstructedLatent = self.manifoldProjector(
                 torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
             )
+            reconstructedLatent = reconstructedLatent[:, 1:, :]
             movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
             integratedCode, predictedPlaces, finalGridState = getIntegration(
                 sequenceProjections[:, 0, :], movements
@@ -86,7 +87,7 @@ class LatentPathModule(PlaceMazeModule):
             actualPlaces,
             finalGridState,
             memory.detach(),
-            reconstructedLatent[:, 1:, :],
+            reconstructedLatent,
             movements,
         )
 

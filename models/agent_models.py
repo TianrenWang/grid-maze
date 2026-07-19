@@ -115,6 +115,9 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
+        self.placeEncoderForMemory = nn.Linear(
+            self.numPlaceCells, self.linearHiddenSize
+        )
 
     """
     Following code is used to figure out how dramatically place code can change
@@ -176,7 +179,7 @@ class PlaceMazeModule(MemoryMazeModule):
         candidateGrid: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         prevPlaces = self.placeEncoder(
-            calculatePlace(self.placeCells, lastAgentLocation, self.fieldSize)[:, 0, :]
+            calculatePlace(self.placeCells, lastAgentLocation, self.fieldSize)
         )
         actualHiddenGrid = prevPlaces[:, : self.integratorSize].contiguous()
         actualCandidateGrid = prevPlaces[:, self.integratorSize :].contiguous()
@@ -196,21 +199,33 @@ class PlaceMazeModule(MemoryMazeModule):
             actualCandidateGrid = torch.where(
                 placeMask, candidatePlace, actualCandidateGrid
             )
-        gridStates, finalGridState = self.pathIntegrator(
+        integratedStates, finalIntegrationState = self.pathIntegrator(
             action, (actualHiddenGrid.unsqueeze(0), actualCandidateGrid.unsqueeze(0))
         )
-        decodedGrid = self.gridDecoder.forward(gridStates)
-        projectedPlace = self.placeProjector(decodedGrid)
+        decodedCode = self.gridDecoder.forward(integratedStates)
+        projectedPlace = self.placeProjector(decodedCode)
         return (
-            decodedGrid.detach(),
+            decodedCode.detach(),
             projectedPlace,
-            finalGridState,
+            finalIntegrationState,
         )
+
+    def _getInitialMemory(self, lastLocation: torch.Tensor, memoryState: torch.Tensor):
+        prevPlaces = self.placeEncoderForMemory(
+            calculatePlace(self.placeCells, lastLocation)
+        )
+        initialPlaceMask = torch.sum(memoryState, 1) == 0
+        return torch.where(initialPlaceMask[:, None], prevPlaces, memoryState)
+
+    def _processVisualMemory(self, vision: torch.Tensor, initialHidden: torch.Tensor):
+        visionFeatures = self._processConvolution(vision)
+        memory, _ = self.trajectoryMemory(visionFeatures, initialHidden.unsqueeze(0))
+        return memory
 
     def _processPreHeads(self, batch):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
-        gridCodes, projectedPlace, finalGridState = self._pathIntegrate(
-            lastAgentLocation,
+        gridCodes, projectedPlace, finalIntegrationState = self._pathIntegrate(
+            lastAgentLocation[:, 0, :],
             action,
             batch[Columns.STATE_IN]["hiddenGrid"],
             batch[Columns.STATE_IN]["candidateGrid"],
@@ -222,9 +237,10 @@ class PlaceMazeModule(MemoryMazeModule):
             )
             memory = policyInput
         else:
-            visionFeatures = self._processConvolution(vision)
-            initialHidden = batch[Columns.STATE_IN]["hiddenObs"].unsqueeze(0)
-            memory = self.trajectoryMemory(visionFeatures, initialHidden)[0]
+            initialState = self._getInitialMemory(
+                lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+            )
+            memory = self._processVisualMemory(vision, initialState)
             gate = self.gridGate(memory.detach())
             policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
 
@@ -232,7 +248,7 @@ class PlaceMazeModule(MemoryMazeModule):
             policyInput,
             memory,
             projectedPlace,
-            finalGridState,
+            finalIntegrationState,
         )
 
     def _forward_exploration(self, batch, **kwargs):

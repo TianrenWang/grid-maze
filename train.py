@@ -9,8 +9,8 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 
-from maze import generateMaze, getMazeDebugString, generateMazeWithOfflimit
-from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from maze import generateMaze, getMazeDebugString
+from environments import MazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 import models  # noqa: F401
 
@@ -34,9 +34,12 @@ parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", action="store_true")
 parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
-parser.add_argument("--offlimit", action="store_true")
+parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
 args = parser.parse_args()
+
+if args.pretraining:
+    args.latentPath = True
 
 
 def usesGrid():
@@ -50,9 +53,7 @@ if __name__ == "__main__":
     visionRange = 4
     maze = None
 
-    if args.offlimit:
-        maze = generateMazeWithOfflimit(mazeSize)
-    elif args.selfLocalize:
+    if args.selfLocalize:
         maze = generateMaze(mazeSize, 0)
     elif not args.randomMaze:
         if not os.path.exists(mazesPath):
@@ -82,11 +83,9 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.latentPath:
-        env = FoggedMazeEnv
-    elif args.selfLocalize:
+    if args.selfLocalize:
         env = SelfLocalizeEnv
-    elif args.grid or args.gps or args.fogged:
+    elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:
         env = MazeEnv
@@ -116,6 +115,7 @@ if __name__ == "__main__":
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
+                    "pretraining": args.pretraining,
                 },
             ),
         )
@@ -172,6 +172,11 @@ if __name__ == "__main__":
                             2,
                         )
                         print("Reconstruction Loss:", reconstructionLoss)
+                        movementLoss = np.round(
+                            result["learners"]["default_policy"]["movement_loss"],
+                            2,
+                        )
+                        print("Movement Loss:", movementLoss)
                     # placeBias = np.round(
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )

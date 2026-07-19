@@ -44,7 +44,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     "bmp,mpd->bmd", placeTarget, placeCells
                 )
 
-                # Reconstruction Loss
+            # Reconstruction Loss
+            if "actualLatents" in fwd_out and "reconstructedLatents" in fwd_out:
                 latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
                 reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
                     lossMask
@@ -58,6 +59,20 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
                 loss += reconstructionLoss
+
+            if "movements" in fwd_out:
+                movements: torch.Tensor = fwd_out["movements"][lossMask]
+                distances = torch.linalg.norm(movements, dim=1)
+                idealMovement = 1 / 30
+                movement_loss = torch.mean(
+                    ((distances - idealMovement) / idealMovement) ** 2
+                )
+                loss += movement_loss
+                self.metrics.log_value(
+                    key=(module_id, "movement_loss"),
+                    value=movement_loss.cpu().detach().numpy(),
+                    window=100,
+                )
 
             positionError = torch.mean(
                 torch.sqrt(

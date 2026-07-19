@@ -64,7 +64,7 @@ class LatentPathModule(PlaceMazeModule):
             )
             actualPlaces = calculatePlace(
                 self.placeCells, sequenceProjections[:, 1:, :]
-            )
+            ).detach()
             """
             Doesn't make any sense to path integrate using artificially generated moves
             because the abstract tasks downstream won't have access to a convenient
@@ -83,7 +83,7 @@ class LatentPathModule(PlaceMazeModule):
         return (
             policyInput,
             predictedPlaces,
-            actualPlaces.detach(),
+            actualPlaces,
             finalGridState,
             memory.detach(),
             reconstructedLatent[:, 1:, :],

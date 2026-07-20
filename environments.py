@@ -21,7 +21,6 @@ class MazeEnv(gym.Env):
         self._actionTaken = 4
         self._debugging = config.get("debugging", None)
         self._mazeTracker = []
-        self._shortestDistance = 0
 
         self._map = None
         self._agentLocation = (
@@ -156,7 +155,6 @@ class MazeEnv(gym.Env):
 
         if (terminated or truncated) and self._debugging:
             print("Steps:", self._episode_len)
-            print("Shortest:", self._shortestDistance)
             print(self.render())
         return self._getObs(), reward, terminated, truncated, self._get_info()
 

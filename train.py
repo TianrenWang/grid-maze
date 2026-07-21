@@ -36,6 +36,7 @@ parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
 parser.add_argument("--offlimit", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
+parser.add_argument("--perturb", action="store_true")
 args = parser.parse_args()
 
 
@@ -98,6 +99,7 @@ if __name__ == "__main__":
         "memoryLen": args.memoryLen,
         "mazeSize": mazeSize,
         "debugging": args.debug,
+        "perturb": args.perturb,
     }
 
     agentConfig = (

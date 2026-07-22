@@ -165,7 +165,7 @@ class MazeEnv(gym.Env):
         ]
         for i in range(self._actualMazeSize):
             for j in range(self._actualMazeSize):
-                if not self._mazeTracker[i][j]:
+                if not self._mazeTracker[i][j] or self._mazeTracker[i][j] == "X":
                     renderOutput[i][j] = " "
                 else:
                     renderOutput[i][j] = self._mazeTracker[i][j]

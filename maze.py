@@ -36,22 +36,12 @@ def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
-def generateMaze(size: int, p_obstacle: float = 0.02):
+def generateMaze(size: int, p_obstacle: float = 0.2):
     maze = [[1 for _ in range(size)] for _ in range(size)]
     for i in range(size):
         for j in range(size):
             if random.random() < p_obstacle:
-                obstacleHeight = random.randint(1, 4)
-                obstacleWidth = random.randint(1, 4)
-                if (
-                    i <= size // 2 < i + obstacleHeight
-                    and j <= size // 2 < j + obstacleWidth
-                ):
-                    continue
-                for x in range(obstacleWidth):
-                    for y in range(obstacleHeight):
-                        if -1 < i + y < size and -1 < j + x < size:
-                            maze[i + y][j + x] = 0
+                maze[i][j] = 0
     return maze
 
 

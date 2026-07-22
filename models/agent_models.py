@@ -106,12 +106,6 @@ class PlaceMazeModule(MemoryMazeModule):
             nn.Linear(self.gridSize, self.linearHiddenSize),
             nn.ReLU(),
         )
-        self.gridGate = nn.Sequential(
-            nn.Linear(self.linearHiddenSize, self.linearHiddenSize),
-            nn.ReLU(),
-            nn.Linear(self.linearHiddenSize, 1),
-            nn.Sigmoid(),
-        )
         self.placeCells = nn.Parameter(torch.rand([self.numPlaceCells, 2]), False)
         self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
         self.placeEncoder = nn.Linear(self.numPlaceCells, 2 * self.integratorSize)
@@ -241,8 +235,7 @@ class PlaceMazeModule(MemoryMazeModule):
                 lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
             )
             memory = self._processVisualMemory(vision, initialState)
-            gate = self.gridGate(memory.detach())
-            policyInput = memory * (1 - gate) + self.gridCompressor(gridCodes) * gate
+            policyInput = memory
 
         return (
             policyInput,

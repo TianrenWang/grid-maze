@@ -40,11 +40,7 @@ class MazeEnv(gym.Env):
             2: np.array([-1, 0]),
             3: np.array([0, -1]),
         }
-        self._visitCounts = [
-            [0 for j in range(self._actualMazeSize)]
-            for i in range(self._actualMazeSize)
-        ]
-        self.previousActions = None
+        self._visitCounts = None
 
     def _get_info(self):
         return {"location": self._agentLocation}
@@ -113,6 +109,10 @@ class MazeEnv(gym.Env):
         self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
         self._episode_len = 0
         self.previousActions = deque()
+        self._visitCounts = [
+            [0 for j in range(self._actualMazeSize)]
+            for i in range(self._actualMazeSize)
+        ]
         if not self._maxSteps:
             self._maxSteps = self.getShortestDistance()
         return self._getObs(), self._get_info()
@@ -171,7 +171,129 @@ class MazeEnv(gym.Env):
                     renderOutput[i][j] = self._mazeTracker[i][j]
         return getMazeDebugString(renderOutput)
 
-    def getSmoothRandomAction(self):
+
+class FoggedMazeEnv(MazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        self._visualRange = config.get("visualRange", 4)
+        visualObsSize = self._visualRange * 2 + 1
+        self.observation_space = gym.spaces.MultiBinary(
+            (visualObsSize, visualObsSize, 2)
+        )
+
+    def _getObs(self):
+        paddedMap = np.pad(
+            self._map,
+            (
+                (self._visualRange, self._visualRange),
+                (self._visualRange, self._visualRange),
+                (0, 0),
+            ),
+            mode="constant",
+        )
+        _paddedAgentLoc = self._agentLocation + np.array((4, 4))
+        vision = paddedMap[
+            _paddedAgentLoc[0] - 4 : _paddedAgentLoc[0] + 5,
+            _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
+            :,
+        ]
+        return vision[:, :, :2]
+
+
+class PlaceMazeEnv(FoggedMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self._lastLocation = self._agentLocation
+        self.observation_space = gym.spaces.Box(
+            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
+        )
+        self._forcedGoal = None
+        self._perturb = config.get("perturb", False)
+
+    def getRandomGoal(self, distance: int):
+        while True:
+            randomY = random.randint(-distance, distance)
+            randomX = random.choice([-1, 1]) * (distance - abs(randomY))
+            goal = np.array([randomX, randomY]) + np.array(self._startLocation)
+            if (
+                np.abs(np.array(self._goalLocation) - goal).sum()
+                > np.abs(
+                    np.array(self._goalLocation) - np.array(self._startLocation)
+                ).sum()
+            ):
+                return goal
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        self._lastLocation = np.array([1, 1])
+        if self._perturb:
+            shiftAmount = (self._actualMazeSize - self._mazeSize) // 2
+            horizontalRange = range(shiftAmount, shiftAmount + self._mazeSize)
+            verticalRange = range(shiftAmount + 1, shiftAmount + self._mazeSize - 1)
+            possibleStarts = (
+                [(shiftAmount, i) for i in horizontalRange]
+                + [(shiftAmount + self._mazeSize, i) for i in horizontalRange]
+                + [(i, shiftAmount) for i in verticalRange]
+                + [(i, shiftAmount + self._mazeSize) for i in verticalRange]
+            )
+            np.random.shuffle(possibleStarts)
+            self._startLocation = possibleStarts.pop()
+            self._forcedGoal = self.getRandomGoal(10)
+        super().reset(seed=seed, options=options)
+        self._lastLocation = self._agentLocation
+        return self._getObs(), self._get_info()
+
+    def step(self, action):
+        if self._perturb and self._episode_len < 10:
+            diff = self._forcedGoal - self._agentLocation
+            flip = random.random()
+            if flip > 0.5 and abs(diff[0]) > 0 or abs(diff[1]) == 0:
+                if diff[0] > 0:
+                    action = 0
+                else:
+                    action = 2
+            elif flip <= 0.5 and abs(diff[1]) > 0 or abs(diff[0]) == 0:
+                if diff[1] > 0:
+                    action = 1
+                else:
+                    action = 3
+
+        self._lastLocation = self._agentLocation
+        return super().step(action)
+
+    def _getObs(self):
+        vision = super()._getObs()
+        actionOneHot = np.zeros(5)
+        actionOneHot[self._actionTaken] = 1
+        return np.concatenate(
+            [
+                vision.flatten(),
+                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
+                (self._agentLocation - self._mazeSize // 2) / self._mazeSize,
+                actionOneHot,
+            ],
+            dtype=np.float32,
+        )
+
+
+class SelfLocalizeEnv(PlaceMazeEnv):
+    def __init__(self, config=None):
+        super().__init__(config)
+        visualObsSize = self._visualRange * 2 + 1
+        self._lastLocation = self._agentLocation
+        self.observation_space = gym.spaces.Box(
+            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
+        )
+        self._actualMazeSize = self._mazeSize
+        self._goalLocation = [self._mazeSize // 2, self._mazeSize // 2]
+        self.previousActions = None
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed)
+        self.previousActions = deque()
+        return self._getObs(), self._get_info()
+
+    def step(self, action):
         """
         Produces random action inline with the agent moving in a directional manner
         that doesn't end in jitter. It follows the following heuristics ranked by priority:
@@ -216,89 +338,7 @@ class MazeEnv(gym.Env):
         self.previousActions.append(best_action)
         if len(self.previousActions) > 3:
             self.previousActions.popleft()
-        return best_action
-
-
-class FoggedMazeEnv(MazeEnv):
-    def __init__(self, config=None):
-        super().__init__(config)
-        self._visualRange = config.get("visualRange", 4)
-        visualObsSize = self._visualRange * 2 + 1
-        self.observation_space = gym.spaces.MultiBinary(
-            (visualObsSize, visualObsSize, 2)
-        )
-
-    def _getObs(self):
-        paddedMap = np.pad(
-            self._map,
-            (
-                (self._visualRange, self._visualRange),
-                (self._visualRange, self._visualRange),
-                (0, 0),
-            ),
-            mode="constant",
-        )
-        _paddedAgentLoc = self._agentLocation + np.array((4, 4))
-        vision = paddedMap[
-            _paddedAgentLoc[0] - 4 : _paddedAgentLoc[0] + 5,
-            _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
-            :,
-        ]
-        return vision[:, :, :2]
-
-
-class PlaceMazeEnv(FoggedMazeEnv):
-    def __init__(self, config=None):
-        super().__init__(config)
-        visualObsSize = self._visualRange * 2 + 1
-        self._lastLocation = self._agentLocation
-        self.observation_space = gym.spaces.Box(
-            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
-        )
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        self._lastLocation = np.array([1, 1])
-        super().reset(seed=seed, options=options)
-        self._lastLocation = self._agentLocation
-        return self._getObs(), self._get_info()
-
-    def step(self, action):
-        self._lastLocation = self._agentLocation
-        return super().step(action)
-
-    def _getObs(self):
-        vision = super()._getObs()
-        actionOneHot = np.zeros(5)
-        actionOneHot[self._actionTaken] = 1
-        return np.concatenate(
-            [
-                vision.flatten(),
-                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
-                (self._agentLocation - self._mazeSize // 2) / self._mazeSize,
-                actionOneHot,
-            ],
-            dtype=np.float32,
-        )
-
-
-class SelfLocalizeEnv(PlaceMazeEnv):
-    def __init__(self, config=None):
-        super().__init__(config)
-        visualObsSize = self._visualRange * 2 + 1
-        self._lastLocation = self._agentLocation
-        self.observation_space = gym.spaces.Box(
-            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
-        )
-        self._actualMazeSize = self._mazeSize
-        self._goalLocation = [self._mazeSize // 2, self._mazeSize // 2]
-
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        super().reset(seed=seed)
-        self.previousActions = deque()
-        return self._getObs(), self._get_info()
-
-    def step(self, action):
-        return super().step(self.getSmoothRandomAction())
+        return super().step(best_action)
 
     def _getObs(self):
         obs = super()._getObs()

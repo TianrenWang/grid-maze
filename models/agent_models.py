@@ -218,11 +218,16 @@ class PlaceMazeModule(MemoryMazeModule):
             batch
         )
         if policyInput is None or visualMemory is None:
+            obs = batch["obs"]
             policy = torch.randn(
-                [*agentLocation.shape[:2], self.action_space.n], dtype=torch.float32
+                [*agentLocation.shape[:2], self.action_space.n],
+                dtype=torch.float32,
+                device=obs.device,
             )
             visualMemory = torch.randn(
-                [*agentLocation.shape[:2], self.linearHiddenSize], dtype=torch.float32
+                [*agentLocation.shape[:2], self.linearHiddenSize],
+                dtype=torch.float32,
+                device=obs.device,
             )
         return {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -249,6 +254,7 @@ class PlaceMazeModule(MemoryMazeModule):
                 embeddings = torch.randn(
                     [*batch["obs"].shape[:2], self.linearHiddenSize],
                     dtype=torch.float32,
+                    device=batch["obs"].device,
                 )
         return self.value_branch(embeddings).squeeze(-1)
 

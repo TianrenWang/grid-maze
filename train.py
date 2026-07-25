@@ -1,19 +1,17 @@
-import pickle
-import os
-import torch
-import numpy as np
 import argparse
-
+import os
+import pickle
 from datetime import datetime
+
+import numpy as np
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
-
-from maze import generateMaze, getMazeDebugString
+import models
 from environments import MazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
-import models  # noqa: F401
-
+from maze import generateMaze, getMazeDebugString
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
@@ -72,7 +70,7 @@ if __name__ == "__main__":
         getMazeDebugString(maze)
 
     if usesGrid():
-        module = models.PlaceMazeModule
+        module = models.PathIntegrationWithVisionModule
         if args.latentPath:
             module = models.LatentPathModule
         elif args.pureCode:
@@ -155,7 +153,7 @@ if __name__ == "__main__":
                 print(
                     f"Iteration {i + 1}",
                     " - ",
-                    str(datetime.now())[:-7],
+                    str(datetime.now(tz=datetime.tzinfo))[:-7],
                 )
                 if args.selfLocalize:
                     predictionError = np.round(

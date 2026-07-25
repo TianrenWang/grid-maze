@@ -91,7 +91,7 @@ class MemoryMazeModule(SimpleMazeModule):
         return self.value_branch(self._processPreHeads(batch)[0]).squeeze(-1)
 
 
-class PlaceMazeModule(MemoryMazeModule):
+class PathIntegrationWithVisionModule(MemoryMazeModule):
     def setup(self):
         MemoryMazeModule.setup(self)
         self.mazeSize = self.model_config.get("mazeSize", 31)

@@ -1,11 +1,11 @@
 import torch
-import torch.nn as nn
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.utils.annotations import override
+from torch import nn
 
-from .agent_models import PlaceMazeModule
+from .agent_models import PathIntegrationWithVisionModule
 from .utils import calculatePlace
 
 
@@ -21,9 +21,9 @@ class ManifoldProjector(nn.Module):
         return projection, reconstructed
 
 
-class LatentPathModule(PlaceMazeModule):
+class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
-        PlaceMazeModule.setup(self)
+        PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
 

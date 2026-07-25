@@ -1,12 +1,12 @@
-import torch.nn as nn
 from ray.rllib.core.columns import Columns
+from torch import nn
 
-from .agent_models import PlaceMazeModule
+from .agent_models import PathIntegrationWithVisionModule
 
 
-class PureCodeModule(PlaceMazeModule):
+class PureCodeModule(PathIntegrationWithVisionModule):
     def setup(self):
-        PlaceMazeModule.setup(self)
+        PathIntegrationWithVisionModule.setup(self)
         self.prePolicyEncoder = nn.Sequential(
             nn.Linear(self.gridSize, self.linearHiddenSize),
             nn.ReLU(),

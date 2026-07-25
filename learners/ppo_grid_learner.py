@@ -1,11 +1,8 @@
-from typing import Any, Dict
-
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModuleID
-
-import torch
 
 
 class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
@@ -15,8 +12,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         *,
         module_id: ModuleID,
         config: PPOConfig,
-        batch: Dict[str, Any],
-        fwd_out: Dict[str, torch.Tensor],
+        batch: dict[str, dict],
+        fwd_out: dict[str, torch.Tensor],
     ):
         if config.learner_config_dict.get("self_localize"):
             loss = 0

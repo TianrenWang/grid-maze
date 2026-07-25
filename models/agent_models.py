@@ -1,10 +1,11 @@
-import torch
-import torch.nn as nn
 import math
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
+
+import torch
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.utils.annotations import override
+from torch import nn
 
 from .simple_conv import SimpleConv
 from .utils import calculatePlace
@@ -112,6 +113,8 @@ class PlaceMazeModule(MemoryMazeModule):
         self.placeEncoderForMemory = nn.Linear(
             self.numPlaceCells, self.linearHiddenSize
         )
+        self.piPolicyPredictor = nn.Linear(self.linearHiddenSize, self.action_space.n)
+        self.piValuePredictor = nn.Linear(self.linearHiddenSize, 1)
 
     @override(TorchRLModule)
     def get_initial_state(self):
@@ -186,7 +189,7 @@ class PlaceMazeModule(MemoryMazeModule):
         memory, _ = self.trajectoryMemory(visionFeatures, initialHidden.unsqueeze(0))
         return memory
 
-    def _processPreHeads(self, batch):
+    def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         gridCodes, projectedPlace, finalIntegrationState = self._pathIntegrate(
             lastAgentLocation[:, 0, :],
@@ -194,18 +197,62 @@ class PlaceMazeModule(MemoryMazeModule):
             batch[Columns.STATE_IN]["hiddenGrid"],
             batch[Columns.STATE_IN]["candidateGrid"],
         )
-        if self.model_config.get("self_localize", False):
-            policyInput = None
-            memory = None
-        else:
+
+        memory = None
+        value = None
+        policy = None
+
+        if not self.model_config.get("self_localize", False):
             initialState = self._getInitialMemory(
                 lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
             )
             memory = self._processVisualMemory(vision, initialState)
-            policyInput = memory
+            if self.training:
+                integration = self.gridCompressor(gridCodes)
+                controlSelector = (
+                    torch.rand(
+                        [*memory.shape[:2], 1],
+                        device=memory.device,
+                        dtype=torch.float32,
+                    )
+                    < 0.75
+                )
+                policy = torch.where(
+                    controlSelector,
+                    self.policy_branch(memory),
+                    self.piPolicyPredictor(integration),
+                )
+                value = torch.where(
+                    controlSelector,
+                    self.value_branch(memory),
+                    self.piValuePredictor(integration),
+                )
+            else:
+                integration = self.gridCompressor(gridCodes)
+                visualPolicy = self.policy_branch(memory)
+                integrationPolicy = self.policy_branch(integration)
+                visualConfidence = (
+                    torch.nn.functional.softmax(visualPolicy, -1)
+                    .flatten()
+                    .topk(2)
+                    .values.sum()
+                    .item()
+                )
+                integrationConfidence = (
+                    torch.nn.functional.softmax(integrationPolicy, -1)
+                    .flatten()
+                    .topk(2)
+                    .values.sum()
+                    .item()
+                )
+                if visualConfidence > integrationConfidence:
+                    policy = visualPolicy
+                else:
+                    policy = integrationPolicy
 
         return (
-            policyInput,
+            policy,
+            value,
             memory,
             projectedPlace,
             finalIntegrationState,
@@ -214,21 +261,29 @@ class PlaceMazeModule(MemoryMazeModule):
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         _, _, agentLocation, _ = self._getObsFromBatch(batch)
-        policyInput, visualMemory, projectedPlace, finalGrid = self._processPreHeads(
-            batch
+        policy, value, visualMemory, projectedPlace, finalGrid = (
+            self._getPolicyAndValue(batch)
         )
-        if policyInput is None or visualMemory is None:
-            obs = batch["obs"]
-            policy = torch.randn(
-                [*agentLocation.shape[:2], self.action_space.n],
+        obs = batch["obs"]
+        if policy is None:
+            policy = torch.ones(
+                [*obs.shape[:2], self.action_space.n],
                 dtype=torch.float32,
                 device=obs.device,
             )
+
+        if visualMemory is None:
             visualMemory = torch.randn(
-                [*agentLocation.shape[:2], self.linearHiddenSize],
+                [*obs.shape[:2], self.linearHiddenSize],
                 dtype=torch.float32,
                 device=obs.device,
             )
+
+        if value is None:
+            value = torch.ones(
+                [*obs.shape[:2], 1], dtype=torch.float32, device=obs.device
+            )
+
         return {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
@@ -236,27 +291,23 @@ class PlaceMazeModule(MemoryMazeModule):
                 "candidateGrid": finalGrid[1].squeeze(0),
                 "hiddenGrid": finalGrid[0].squeeze(0),
             },
-            Columns.EMBEDDINGS: visualMemory,
+            Columns.EMBEDDINGS: value,
             "placeLogit": projectedPlace,
             "placeTarget": calculatePlace(
                 self.placeCells, agentLocation, self.fieldSize
             ),
-            "placeCells": self.placeCells.unsqueeze(0)
-            .unsqueeze(0)
-            .expand([*projectedPlace.shape[:2], self.numPlaceCells, 2]),
         }
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _, _ = self._processPreHeads(batch)
+            obs = batch["obs"]
+            _, embeddings, _, _, _ = self._getPolicyAndValue(batch)
             if embeddings is None:
-                embeddings = torch.randn(
-                    [*batch["obs"].shape[:2], self.linearHiddenSize],
-                    dtype=torch.float32,
-                    device=batch["obs"].device,
+                return torch.ones(
+                    [*obs.shape[:2]], dtype=torch.float32, device=obs.device
                 )
-        return self.value_branch(embeddings).squeeze(-1)
+        return embeddings.squeeze(-1)
 
 
 class GPSModule(MemoryMazeModule):

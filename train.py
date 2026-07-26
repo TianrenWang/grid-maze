@@ -97,7 +97,6 @@ if __name__ == "__main__":
         "memoryLen": args.memoryLen,
         "mazeSize": mazeSize,
         "debugging": args.debug,
-        "perturb": args.perturb,
     }
 
     agentConfig = (
@@ -155,7 +154,7 @@ if __name__ == "__main__":
                 print(
                     f"Iteration {i + 1}",
                     " - ",
-                    str(datetime.now(tz=datetime.tzinfo))[:-7],
+                    str(datetime.now())[:-7],  # noqa: DTZ005
                 )
                 if args.selfLocalize:
                     predictionError = np.round(

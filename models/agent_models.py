@@ -193,6 +193,8 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
         memory = None
         value = None
         policy = None
+        projectedPlace = None
+        finalIntegrationState = None
 
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
 
@@ -255,8 +257,12 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": visualMemory[:, -1],
-                "candidateGrid": finalGrid[1].squeeze(0),
-                "hiddenGrid": finalGrid[0].squeeze(0),
+                "candidateGrid": finalGrid[1].squeeze(0)
+                if finalGrid is not None
+                else batch[Columns.STATE_IN]["candidateGrid"],
+                "hiddenGrid": finalGrid[0].squeeze(0)
+                if finalGrid is not None
+                else batch[Columns.STATE_IN]["hiddenGrid"],
             },
             Columns.EMBEDDINGS: value,
         }

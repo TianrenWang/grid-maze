@@ -190,65 +190,32 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
         return memory
 
     def _getPolicyAndValue(self, batch):
-        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
-        gridCodes, projectedPlace, finalIntegrationState = self._pathIntegrate(
-            lastAgentLocation[:, 0, :],
-            action,
-            batch[Columns.STATE_IN]["hiddenGrid"],
-            batch[Columns.STATE_IN]["candidateGrid"],
-        )
-
         memory = None
         value = None
         policy = None
 
-        if not self.model_config.get("self_localize", False):
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
+
+        selfLocalize = self.model_config.get("self_localize", False)
+        useVisionPolicy = self.model_config.get("visionPolicy", False)
+        if selfLocalize or not useVisionPolicy:
+            gridCodes, projectedPlace, finalIntegrationState = self._pathIntegrate(
+                lastAgentLocation[:, 0, :],
+                action,
+                batch[Columns.STATE_IN]["hiddenGrid"],
+                batch[Columns.STATE_IN]["candidateGrid"],
+            )
+            if not selfLocalize:
+                integration = self.gridCompressor(gridCodes)
+                policy = self.piPolicyPredictor(integration)
+                value = self.piValuePredictor(integration)
+        elif useVisionPolicy:
             initialState = self._getInitialMemory(
                 lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
             )
             memory = self._processVisualMemory(vision, initialState)
-            if self.training:
-                integration = self.gridCompressor(gridCodes)
-                controlSelector = (
-                    torch.rand(
-                        [*memory.shape[:2], 1],
-                        device=memory.device,
-                        dtype=torch.float32,
-                    )
-                    < 0.75
-                )
-                policy = torch.where(
-                    controlSelector,
-                    self.policy_branch(memory),
-                    self.piPolicyPredictor(integration),
-                )
-                value = torch.where(
-                    controlSelector,
-                    self.value_branch(memory),
-                    self.piValuePredictor(integration),
-                )
-            else:
-                integration = self.gridCompressor(gridCodes)
-                visualPolicy = self.policy_branch(memory)
-                integrationPolicy = self.policy_branch(integration)
-                visualConfidence = (
-                    torch.nn.functional.softmax(visualPolicy, -1)
-                    .flatten()
-                    .topk(2)
-                    .values.sum()
-                    .item()
-                )
-                integrationConfidence = (
-                    torch.nn.functional.softmax(integrationPolicy, -1)
-                    .flatten()
-                    .topk(2)
-                    .values.sum()
-                    .item()
-                )
-                if visualConfidence > integrationConfidence:
-                    policy = visualPolicy
-                else:
-                    policy = integrationPolicy
+            policy = self.policy_branch(memory)
+            value = self.value_branch(memory)
 
         return (
             policy,
@@ -284,7 +251,7 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
                 [*obs.shape[:2], 1], dtype=torch.float32, device=obs.device
             )
 
-        return {
+        output = {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": visualMemory[:, -1],
@@ -292,11 +259,15 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
                 "hiddenGrid": finalGrid[0].squeeze(0),
             },
             Columns.EMBEDDINGS: value,
-            "placeLogit": projectedPlace,
-            "placeTarget": calculatePlace(
-                self.placeCells, agentLocation, self.fieldSize
-            ),
         }
+
+        if self.model_config.get("self_localize", False):
+            output["placeLogit"] = projectedPlace
+            output["placeTarget"] = calculatePlace(
+                self.placeCells, agentLocation, self.fieldSize
+            )
+
+        return output
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
@@ -308,6 +279,59 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
                     [*obs.shape[:2]], dtype=torch.float32, device=obs.device
                 )
         return embeddings.squeeze(-1)
+
+
+class PathIntegrationWithVisionModuleForEval(PathIntegrationWithVisionModule):
+    def setup(self):
+        PathIntegrationWithVisionModule.setup(self)
+
+    def _getPolicyAndValue(self, batch):
+        assert not self.training, (
+            '"PathIntegrationWithVisionModuleForEval" cannot be used for training'
+        )
+
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
+        gridCodes, _, finalIntegrationState = self._pathIntegrate(
+            lastAgentLocation[:, 0, :],
+            action,
+            batch[Columns.STATE_IN]["hiddenGrid"],
+            batch[Columns.STATE_IN]["candidateGrid"],
+        )
+
+        initialState = self._getInitialMemory(
+            lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+        )
+        memory = self._processVisualMemory(vision, initialState)
+
+        integration = self.gridCompressor(gridCodes)
+        visualPolicy = self.policy_branch(memory)
+        integrationPolicy = self.policy_branch(integration)
+        visualConfidence = (
+            torch.nn.functional.softmax(visualPolicy, -1)
+            .flatten()
+            .topk(2)
+            .values.sum()
+            .item()
+        )
+        integrationConfidence = (
+            torch.nn.functional.softmax(integrationPolicy, -1)
+            .flatten()
+            .topk(2)
+            .values.sum()
+            .item()
+        )
+        if visualConfidence > integrationConfidence:
+            policy = visualPolicy
+        else:
+            policy = integrationPolicy
+
+        return (
+            policy,
+            None,
+            memory,
+            None,
+            finalIntegrationState,
+        )
 
 
 class GPSModule(MemoryMazeModule):

@@ -34,7 +34,8 @@ parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
 parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
-parser.add_argument("--perturb", action="store_true")
+parser.add_argument("--entropy", type=float, default=0.1)
+parser.add_argument("--visionPolicy", action="store_true")
 args = parser.parse_args()
 
 if args.pretraining:
@@ -116,6 +117,7 @@ if __name__ == "__main__":
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
                     "pretraining": args.pretraining,
+                    "visionPolicy": args.visionPolicy,
                 },
             ),
         )
@@ -127,7 +129,7 @@ if __name__ == "__main__":
         )
         .training(
             lr=args.lr,
-            entropy_coeff=[[0, 0.1], [8000000, 0.1], [8000001, 0.01]],
+            entropy_coeff=args.entropy,
         )
     )
     if usesGrid():

@@ -297,39 +297,55 @@ class PathIntegrationWithVisionModuleForEval(PathIntegrationWithVisionModule):
         )
 
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
-        gridCodes, _, finalIntegrationState = self._pathIntegrate(
-            lastAgentLocation[:, 0, :],
-            action,
-            batch[Columns.STATE_IN]["hiddenGrid"],
-            batch[Columns.STATE_IN]["candidateGrid"],
-        )
 
-        initialState = self._getInitialMemory(
-            lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
-        )
-        memory = self._processVisualMemory(vision, initialState)
+        def getIntegration():
+            return self._pathIntegrate(
+                lastAgentLocation[:, 0, :],
+                action,
+                batch[Columns.STATE_IN]["hiddenGrid"],
+                batch[Columns.STATE_IN]["candidateGrid"],
+            )
 
-        integration = self.gridCompressor(gridCodes)
-        visualPolicy = self.policy_branch(memory)
-        integrationPolicy = self.policy_branch(integration)
-        visualConfidence = (
-            torch.nn.functional.softmax(visualPolicy, -1)
-            .flatten()
-            .topk(2)
-            .values.sum()
-            .item()
-        )
-        integrationConfidence = (
-            torch.nn.functional.softmax(integrationPolicy, -1)
-            .flatten()
-            .topk(2)
-            .values.sum()
-            .item()
-        )
-        if visualConfidence > integrationConfidence:
-            policy = visualPolicy
+        def getVisualMemory():
+            initialState = self._getInitialMemory(
+                lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+            )
+            return self._processVisualMemory(vision, initialState)
+
+        memory = None
+        finalIntegrationState = None
+
+        if self.model_config.get("visionPolicy", False):
+            memory = getVisualMemory()
+            policy = self.policy_branch(memory)
+        elif self.model_config.get("integrationPolicy", False):
+            gridCodes, _, finalIntegrationState = getIntegration()
+            integration = self.gridCompressor(gridCodes)
+            policy = self.piPolicyPredictor(integration)
         else:
-            policy = integrationPolicy
+            gridCodes, _, finalIntegrationState = getIntegration()
+            memory = getVisualMemory()
+            integration = self.gridCompressor(gridCodes)
+            visualPolicy = self.policy_branch(memory)
+            integrationPolicy = self.policy_branch(integration)
+            visualConfidence = (
+                torch.nn.functional.softmax(visualPolicy, -1)
+                .flatten()
+                .topk(2)
+                .values.sum()
+                .item()
+            )
+            integrationConfidence = (
+                torch.nn.functional.softmax(integrationPolicy, -1)
+                .flatten()
+                .topk(2)
+                .values.sum()
+                .item()
+            )
+            if visualConfidence > integrationConfidence:
+                policy = visualPolicy
+            else:
+                policy = integrationPolicy
 
         return (
             policy,

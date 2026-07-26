@@ -18,8 +18,9 @@ parser.add_argument("--grid", action="store_true")
 parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--latentPath", action="store_true")
 parser.add_argument("--pretraining", action="store_true")
-parser.add_argument("--pureCode", action="store_true")
 parser.add_argument("--perturb", action="store_true")
+parser.add_argument("--visionPolicy", action="store_true")
+parser.add_argument("--integrationPolicy", action="store_true")
 args = parser.parse_args()
 
 if args.pretraining:
@@ -27,7 +28,7 @@ if args.pretraining:
 
 
 def usesGrid():
-    return args.grid or args.selfLocalize or args.latentPath or args.pureCode
+    return args.grid or args.selfLocalize or args.latentPath or args.integrationPolicy
 
 
 if __name__ == "__main__":
@@ -38,8 +39,6 @@ if __name__ == "__main__":
         module = models.PathIntegrationWithVisionModuleForEval
         if args.latentPath:
             module = models.LatentPathModule
-        elif args.pureCode:
-            module = models.PureCodeModule
     else:
         module = models.PlaceCellControlModule
 
@@ -48,10 +47,11 @@ if __name__ == "__main__":
     environmentConfig = {
         "maze": None,
         "start": None,
-        "maxSteps": args.maxSteps,
+        "maxSteps": 300,
         "memoryLen": args.memoryLen,
         "mazeSize": mazeSize,
         "perturb": args.perturb,
+        "eval": True,
     }
 
     agentConfig = (
@@ -69,6 +69,8 @@ if __name__ == "__main__":
                     "inputSize": visionRange * 2 + 1,
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
+                    "visionPolicy": args.visionPolicy,
+                    "integrationPolicy": args.integrationPolicy,
                 },
             ),
         )

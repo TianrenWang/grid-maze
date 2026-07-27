@@ -21,6 +21,7 @@ parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--perturb", action="store_true")
 parser.add_argument("--visionPolicy", action="store_true")
 parser.add_argument("--integrationPolicy", action="store_true")
+parser.add_argument("--debug", type=int, default=0)
 args = parser.parse_args()
 
 if args.pretraining:
@@ -28,7 +29,7 @@ if args.pretraining:
 
 
 def usesGrid():
-    return args.grid or args.selfLocalize or args.latentPath or args.integrationPolicy
+    return args.grid or args.latentPath or args.integrationPolicy
 
 
 if __name__ == "__main__":
@@ -52,6 +53,7 @@ if __name__ == "__main__":
         "mazeSize": mazeSize,
         "perturb": args.perturb,
         "eval": True,
+        "debugging": args.debug,
     }
 
     agentConfig = (
@@ -76,9 +78,9 @@ if __name__ == "__main__":
         )
         .learners(num_gpus_per_learner=1 if torch.cuda.is_available() else 0)
         .evaluation(
-            evaluation_num_env_runners=8,
+            evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
-            evaluation_duration=128,
+            evaluation_duration=1 if args.debug else 128,
         )
     )
     agentConfig.env_config = environmentConfig
@@ -87,15 +89,19 @@ if __name__ == "__main__":
     if os.path.exists(checkpointPath):
         agent.restore_from_path(checkpointPath)
 
-    numSamples = 10
-    averageReturn = 0
-    averageSteps = 0
-    for j in range(numSamples):
-        result = agent.evaluate()["env_runners"]
-        averageReturn += result["episode_return_mean"]
-        averageSteps += result["episode_len_mean"]
-    averageReturn = round(averageReturn / numSamples, 2)
-    print("Performance:", averageReturn)
-    averageSteps = round(averageSteps / numSamples, 0)
-    print("Steps:", averageSteps)
-    numSamples = int((args.maxSteps - averageSteps) / args.maxSteps * 10) + 1
+    if args.debug:
+        for i in range(args.debug):
+            agent.evaluate()
+    else:
+        numSamples = 10
+        averageReturn = 0
+        averageSteps = 0
+        for j in range(numSamples):
+            result = agent.evaluate()["env_runners"]
+            averageReturn += result["episode_return_mean"]
+            averageSteps += result["episode_len_mean"]
+        averageReturn = round(averageReturn / numSamples, 2)
+        print("Performance:", averageReturn)
+        averageSteps = round(averageSteps / numSamples, 0)
+        print("Steps:", averageSteps)
+        numSamples = int((args.maxSteps - averageSteps) / args.maxSteps * 10) + 1

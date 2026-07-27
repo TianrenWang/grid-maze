@@ -327,14 +327,7 @@ class PathIntegrationWithVisionModuleForEval(PathIntegrationWithVisionModule):
             memory = getVisualMemory()
             integration = self.gridCompressor(gridCodes)
             visualPolicy = self.policy_branch(memory)
-            integrationPolicy = self.policy_branch(integration)
-            visualConfidence = (
-                torch.nn.functional.softmax(visualPolicy, -1)
-                .flatten()
-                .topk(2)
-                .values.sum()
-                .item()
-            )
+            integrationPolicy = self.piPolicyPredictor(integration)
             integrationConfidence = (
                 torch.nn.functional.softmax(integrationPolicy, -1)
                 .flatten()
@@ -342,7 +335,8 @@ class PathIntegrationWithVisionModuleForEval(PathIntegrationWithVisionModule):
                 .values.sum()
                 .item()
             )
-            if visualConfidence > integrationConfidence:
+
+            if integrationConfidence < 0.8:
                 policy = visualPolicy
             else:
                 policy = integrationPolicy

@@ -1,19 +1,17 @@
-import pickle
-import os
-import torch
-import numpy as np
 import argparse
-
+import os
+import pickle
 from datetime import datetime
+
+import numpy as np
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
-
-from maze import generateMaze, getMazeDebugString, generateMazeWithOfflimit
-from environments import MazeEnv, FoggedMazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+import models
+from environments import MazeEnv, PlaceMazeEnv, SelfLocalizeEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
-import models  # noqa: F401
-
+from maze import generateMaze, getMazeDebugString
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
@@ -34,10 +32,14 @@ parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", action="store_true")
 parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
-parser.add_argument("--offlimit", action="store_true")
+parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
-parser.add_argument("--perturb", action="store_true")
+parser.add_argument("--entropy", type=float, default=0.1)
+parser.add_argument("--visionPolicy", action="store_true")
 args = parser.parse_args()
+
+if args.pretraining:
+    args.latentPath = True
 
 
 def usesGrid():
@@ -51,9 +53,7 @@ if __name__ == "__main__":
     visionRange = 4
     maze = None
 
-    if args.offlimit:
-        maze = generateMazeWithOfflimit(mazeSize)
-    elif args.selfLocalize:
+    if args.selfLocalize:
         maze = generateMaze(mazeSize, 0)
     elif not args.randomMaze:
         if not os.path.exists(mazesPath):
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         getMazeDebugString(maze)
 
     if usesGrid():
-        module = models.PlaceMazeModule
+        module = models.PathIntegrationWithVisionModule
         if args.latentPath:
             module = models.LatentPathModule
         elif args.pureCode:
@@ -83,11 +83,9 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.latentPath:
-        env = FoggedMazeEnv
-    elif args.selfLocalize:
+    if args.selfLocalize:
         env = SelfLocalizeEnv
-    elif args.grid or args.gps or args.fogged:
+    elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:
         env = MazeEnv
@@ -99,7 +97,6 @@ if __name__ == "__main__":
         "memoryLen": args.memoryLen,
         "mazeSize": mazeSize,
         "debugging": args.debug,
-        "perturb": args.perturb,
     }
 
     agentConfig = (
@@ -118,6 +115,8 @@ if __name__ == "__main__":
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
+                    "pretraining": args.pretraining,
+                    "visionPolicy": args.visionPolicy,
                 },
             ),
         )
@@ -129,9 +128,7 @@ if __name__ == "__main__":
         )
         .training(
             lr=args.lr,
-            entropy_coeff=[[0, 0.1], [8000000, 0.1], [8000001, 0.01]]
-            if not args.grid
-            else 0.01,
+            entropy_coeff=args.entropy,
         )
     )
     if usesGrid():
@@ -157,7 +154,7 @@ if __name__ == "__main__":
                 print(
                     f"Iteration {i + 1}",
                     " - ",
-                    str(datetime.now())[:-7],
+                    str(datetime.now())[:-7],  # noqa: DTZ005
                 )
                 if args.selfLocalize:
                     predictionError = np.round(
@@ -174,6 +171,11 @@ if __name__ == "__main__":
                             2,
                         )
                         print("Reconstruction Loss:", reconstructionLoss)
+                        movementLoss = np.round(
+                            result["learners"]["default_policy"]["movement_loss"],
+                            2,
+                        )
+                        print("Movement Loss:", movementLoss)
                     # placeBias = np.round(
                     #     result["learners"]["default_policy"]["place_bias"], 2
                     # )

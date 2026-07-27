@@ -1,10 +1,10 @@
-from typing import Optional
-from collections import deque
-import numpy as np
-import gymnasium as gym
 import random
+from collections import deque
 
-from maze import getMazeDebugString, generateMaze
+import gymnasium as gym
+import numpy as np
+
+from maze import generateMaze, getMazeDebugString
 
 
 class MazeEnv(gym.Env):
@@ -21,7 +21,7 @@ class MazeEnv(gym.Env):
         self._actionTaken = 4
         self._debugging = config.get("debugging", None)
         self._mazeTracker = []
-        self._shortestDistance = 0
+        self._eval = config.get("eval", False)
 
         self._map = None
         self._agentLocation = (
@@ -57,7 +57,7 @@ class MazeEnv(gym.Env):
         else:
             return location + goal - 8
 
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         if self._randomMaze:
             self._mazeArray = generateMaze(self._actualMazeSize)
@@ -138,11 +138,14 @@ class MazeEnv(gym.Env):
         self._episode_len += 1
         truncated = self._episode_len > self._maxSteps
         if terminated:
-            if self._episode_len > 100:
-                reward = 0.1
+            if self._eval:
+                reward = 1
             else:
-                closenessFactor = 1 - self._episode_len / 100
-                reward = 0.1 + closenessFactor**2
+                if self._episode_len > 100:
+                    reward = 0.1
+                else:
+                    closenessFactor = 1 - self._episode_len / 100
+                    reward = 0.1 + closenessFactor**2
         else:
             reward = 0
 
@@ -156,7 +159,6 @@ class MazeEnv(gym.Env):
 
         if (terminated or truncated) and self._debugging:
             print("Steps:", self._episode_len)
-            print("Shortest:", self._shortestDistance)
             print(self.render())
         return self._getObs(), reward, terminated, truncated, self._get_info()
 
@@ -167,7 +169,7 @@ class MazeEnv(gym.Env):
         ]
         for i in range(self._actualMazeSize):
             for j in range(self._actualMazeSize):
-                if not self._mazeTracker[i][j]:
+                if not self._mazeTracker[i][j] or self._mazeTracker[i][j] == "X":
                     renderOutput[i][j] = " "
                 else:
                     renderOutput[i][j] = self._mazeTracker[i][j]
@@ -226,7 +228,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
             ):
                 return goal
 
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
         self._lastLocation = np.array([1, 1])
         if self._perturb:
             shiftAmount = (self._actualMazeSize - self._mazeSize) // 2
@@ -290,7 +292,7 @@ class SelfLocalizeEnv(PlaceMazeEnv):
         self._goalLocation = [self._mazeSize // 2, self._mazeSize // 2]
         self.previousActions = None
 
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         self.previousActions = deque()
         return self._getObs(), self._get_info()

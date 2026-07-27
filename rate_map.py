@@ -1,20 +1,22 @@
-from ray.rllib.core.columns import Columns
-from ray.rllib.utils.numpy import convert_to_numpy
-from ray.rllib.core.rl_module.rl_module import RLModule
-from ray.rllib.core import DEFAULT_MODULE_ID
-import matplotlib.pyplot as plt
-import matplotlib
 import random
+
+import matplotlib
+import matplotlib.pyplot as plt
+from ray.rllib.core import DEFAULT_MODULE_ID
+from ray.rllib.core.columns import Columns
+from ray.rllib.core.rl_module.rl_module import RLModule
+from ray.rllib.utils.numpy import convert_to_numpy
 
 matplotlib.use("Agg")
 
+import argparse
+import os
+
 import numpy as np
 import torch
-import os
-import argparse
 
-from environments import PlaceMazeEnv
 import models
+from environments import PlaceMazeEnv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--expName", type=str, default="default_exp")
@@ -48,7 +50,9 @@ def generateRatemap(mazeSize: int, modulePath: str, expName: str):
             "mazeSize": mazeSize,
         }
     )
-    module: models.PlaceMazeModule = RLModule.from_checkpoint(modulePath)
+    module: models.PathIntegrationWithVisionModule = RLModule.from_checkpoint(
+        modulePath
+    )
     obs, _ = env.reset()
     steps = 0
     occupancyCounter = []
@@ -73,7 +77,7 @@ def generateRatemap(mazeSize: int, modulePath: str, expName: str):
         }
         rl_module_out = module.forward_exploration(batched_obs)
         action = getMoveByCoverage(env, occupancyCounter)
-        obs, reward, done, truncated, info = env.step(action)
+        obs, _, done, truncated, _ = env.step(action)
         done = done or truncated
         steps += 1
         occupancyCounter[env._agentLocation[0]][env._agentLocation[1]] += 1

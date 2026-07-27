@@ -1,19 +1,15 @@
 import torch
-import torch.nn as nn
-import math
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.utils.annotations import override
+from torch import nn
 
-from .agent_models import MemoryMazeModule
-from .multi_head_lstm import MultiHeadLSTM
-
-NUM_MODULES = 10
-GRID_MODULE_DIM = 2
+from .agent_models import PathIntegrationWithVisionModule
+from .utils import calculatePlace
 
 
-class ModuleProjector(nn.Module):
+class ManifoldProjector(nn.Module):
     def __init__(self, inputSize: int, latentSize: int):
         super().__init__()
         self.encoder = nn.Sequential(nn.Linear(inputSize, latentSize), nn.Sigmoid())
@@ -25,229 +21,116 @@ class ModuleProjector(nn.Module):
         return projection, reconstructed
 
 
-class LatentPathModule(MemoryMazeModule):
+class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
-        MemoryMazeModule.setup(self)
-        self.integratorSize = 128
-        self.gridSize = 512
-        self.numPlaceCells = 32
-        self.mazeSize = self.model_config.get("mazeSize", 31)
-        self.gridCompressor = nn.Sequential(
-            nn.Linear(self.gridSize * NUM_MODULES, self.gridSize),
-            nn.ReLU(),
-            nn.Linear(self.gridSize, self.linearHiddenSize),
-            nn.ReLU(),
-        )
-        self.memoryEncoder = nn.Sequential(
-            nn.Linear(
-                self.linearHiddenSize * 2,
-                self.linearHiddenSize,
-            ),
-            nn.ReLU(),
-            nn.Dropout(),
-        )
-
-        self.moduleProjector = ModuleProjector(
-            self.linearHiddenSize, GRID_MODULE_DIM * NUM_MODULES
-        )
-        self.pathIntegrator = MultiHeadLSTM(
-            GRID_MODULE_DIM, self.integratorSize, NUM_MODULES
-        )
-        self.gridProjectorWeight = nn.Parameter(
-            torch.Tensor(NUM_MODULES, self.integratorSize, self.gridSize)
-        )
-        self.gridProjectorBias = nn.Parameter(torch.Tensor(NUM_MODULES, self.gridSize))
-        self.placeDecoderWeight = nn.Parameter(
-            torch.Tensor(NUM_MODULES, self.gridSize, self.numPlaceCells)
-        )
-        self.placeCells = nn.Parameter(
-            torch.rand([NUM_MODULES, self.numPlaceCells, GRID_MODULE_DIM]),
-            False,
-        )
-        self.fieldSize = 0.3 / math.sqrt(self.numPlaceCells)
-        self.placeEncoderWeight = nn.Parameter(
-            torch.Tensor(NUM_MODULES, self.numPlaceCells, 2 * self.integratorSize)
-        )
-        self.placeEncoderBias = nn.Parameter(
-            torch.Tensor(NUM_MODULES, 2 * self.integratorSize)
-        )
-        stdv = 1.0 / math.sqrt(self.integratorSize)
-        for w in (
-            self.gridProjectorWeight,
-            self.gridProjectorBias,
-            self.placeDecoderWeight,
-            self.placeEncoderWeight,
-            self.placeEncoderBias,
-        ):
-            nn.init.uniform_(w, -stdv, stdv)
-
-    def get_place_activation(self, coordinates: torch.Tensor):
-        with torch.no_grad():
-            originalShape = coordinates.shape[:-2]
-            diff = coordinates.flatten(0, -3).unsqueeze(2) - self.placeCells.unsqueeze(
-                0
-            )
-            dist2 = (diff**2).sum(dim=-1)
-            return torch.nn.functional.softmax(
-                -dist2 / (2 * self.fieldSize**2), dim=-1
-            ).reshape([*originalShape, NUM_MODULES, self.numPlaceCells])
-
-    def _pathIntegrate(
-        self,
-        sequenceProjections: torch.Tensor,
-        initialProjections: torch.Tensor,
-    ):
-        pastPlaceCellActivations = self.get_place_activation(initialProjections)
-        encodedPlace = torch.einsum(
-            "bmp,mpe->bme", pastPlaceCellActivations, self.placeEncoderWeight
-        ) + self.placeEncoderBias.unsqueeze(0)
-        initialHidden = encodedPlace[:, :, : self.integratorSize].contiguous()
-        initialCandidate = encodedPlace[:, :, self.integratorSize :].contiguous()
-        movements = sequenceProjections - torch.concat(
-            [
-                initialProjections[:, None, :, :],
-                sequenceProjections[:, :-1, :, :],
-            ],
-            dim=1,
-        )
-        hiddens, finalStates = self.pathIntegrator.forward(
-            movements, initialHidden, initialCandidate, 20
-        )
-        gridCodes = (
-            torch.einsum("btmd,mdg->btmg", hiddens, self.gridProjectorWeight)
-            + self.gridProjectorBias[None, None, :, :]
-        )
-        predictedPlaceLogit = torch.einsum(
-            "btmg,mgp->btmp",
-            torch.nn.functional.dropout(gridCodes, training=self.training),
-            self.placeDecoderWeight,
-        )
-        return (
-            gridCodes.flatten(2),
-            predictedPlaceLogit,
-            finalStates,
-        )
-
-    @override(TorchRLModule)
-    def get_initial_state(self):
-        return {
-            "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
-            "candidateGrid": torch.zeros(
-                (NUM_MODULES * self.integratorSize,), dtype=torch.float32
-            ),
-            "hiddenGrid": torch.zeros(
-                (NUM_MODULES * self.integratorSize,), dtype=torch.float32
-            ),
-        }
+        PathIntegrationWithVisionModule.setup(self)
+        self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
+        self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
 
     @override(TorchRLModule)
     def _forward_exploration(self, batch, **kwargs):
-        self.eval()
-        policyFeature, _, _, finalGrid, latents, _ = self._processPreHeads(batch)
-        policy = self.policy_branch(policyFeature)
-        return {
-            Columns.ACTION_DIST_INPUTS: policy,
-            Columns.STATE_OUT: {
-                "hiddenObs": latents[:, -1, :],
-                "candidateGrid": finalGrid[1].squeeze(0),
-                "hiddenGrid": finalGrid[0].squeeze(0),
-            },
-            "actualLatents": latents,
-        }
-
-    def _getPolicyInput(self, features, gridCode):
-        with torch.no_grad():
-            gridWithoutGrad = torch.Tensor(gridCode)
-            featuresWithoutGrad = torch.Tensor(features)
-        compressedGrid = self.gridCompressor.forward(gridWithoutGrad)
-        encodedMemory = self.memoryEncoder(
-            torch.concat([featuresWithoutGrad, compressedGrid], dim=2)
-        )
-        return encodedMemory
+        return self._forward(batch, **kwargs)
 
     def _processPreHeads(self, batch):
-        initialLatent = batch[Columns.STATE_IN]["hiddenObs"]
-        latents, _ = super()._processPreHeads(batch)
-        with torch.no_grad():
-            latentsWithoutGrad = torch.Tensor(latents)
-            initialLatentsWithoutGrad = torch.Tensor(initialLatent)
-        if self.model_config.get("self_localize"):
-            sequenceProjections, reconstructedLatent = self.moduleProjector.forward(
-                latentsWithoutGrad
+        vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        initialMemory = self._getInitialMemory(
+            lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+        )
+
+        def getIntegration(startingCoordinate: torch.Tensor, movement: torch.Tensor):
+            return self._pathIntegrate(
+                startingCoordinate,
+                movement,
+                batch[Columns.STATE_IN]["hiddenGrid"],
+                batch[Columns.STATE_IN]["candidateGrid"],
             )
-            pastProjections, _ = self.moduleProjector.forward(initialLatentsWithoutGrad)
-            with torch.no_grad():
-                sequenceProjections = sequenceProjections.reshape(
-                    [*latents.shape[:2], NUM_MODULES, GRID_MODULE_DIM]
-                )
-                pastProjections = pastProjections.reshape(
-                    [initialLatent.shape[0], NUM_MODULES, GRID_MODULE_DIM]
-                )
-            gridCode, predictedPlaces, finalGrid = self._pathIntegrate(
-                sequenceProjections, pastProjections
+
+        memory = self._processVisualMemory(vision, initialMemory)
+
+        predictedPlaces = None
+        actualPlaces = None
+        finalGridState = None
+        reconstructedLatent = None
+        movements = None
+
+        if self.model_config.get("self_localize", False):
+            memory = memory.detach()
+            sequenceProjections, reconstructedLatent = self.manifoldProjector(
+                torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
             )
-            actualPlaces = self.get_place_activation(sequenceProjections)
+            reconstructedLatent = reconstructedLatent[:, 1:, :]
+            movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
+            integratedCode, predictedPlaces, finalGridState = getIntegration(
+                sequenceProjections[:, 0, :], movements
+            )
+            actualPlaces = calculatePlace(
+                self.placeCells, sequenceProjections[:, 1:, :]
+            ).detach()
+            """
+            Doesn't make any sense to path integrate using artificially generated moves
+            because the abstract tasks downstream won't have access to a convenient
+            manifold to navigate smoothly in.
+            """
+            policyInput = memory
+        elif self.model_config.get("pretraining", False):
+            policyInput = memory
         else:
-            batchShape = latents.shape[:2]
-            gridCode = torch.zeros(
-                [*batchShape[:2], NUM_MODULES * self.gridSize],
-                dtype=torch.float32,
-                device=latents.device,
+            integratedCode, _, _ = getIntegration()
+            gate = self.gridGate(memory.detach())
+            policyInput = (
+                memory * (1 - gate) + self.gridCompressor(integratedCode) * gate
             )
-            finalGrid = torch.zeros(
-                [1, batchShape[0], NUM_MODULES * self.integratorSize],
-                dtype=torch.float32,
-                device=latents.device,
-            )
-            finalGrid = (finalGrid, finalGrid)
-            predictedPlaces = torch.zeros(
-                [*batchShape, NUM_MODULES, self.numPlaceCells],
-                dtype=torch.float32,
-                device=latents.device,
-            )
-            actualPlaces = predictedPlaces
-            reconstructedLatent = torch.zeros(
-                latents.shape,
-                dtype=torch.float32,
-                device=latents.device,
-            )
+
         return (
-            self._getPolicyInput(latents, torch.nn.functional.dropout(gridCode)),
+            policyInput,
             predictedPlaces,
             actualPlaces,
-            finalGrid,
-            latentsWithoutGrad,
+            finalGridState,
+            memory.detach(),
             reconstructedLatent,
+            movements,
         )
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        self.train()
         (
             policyFeature,
             predictedPlaces,
             actualPlaces,
             finalGrid,
-            latents,
+            memory,
             reconstructedLatent,
+            movements,
         ) = self._processPreHeads(batch)
         policy = self.policy_branch(policyFeature)
-        return {
+        output = {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
-                "hiddenObs": latents[:, -1, :],
-                "candidateGrid": finalGrid[1].squeeze(0),
-                "hiddenGrid": finalGrid[0].squeeze(0),
+                "hiddenObs": memory[:, -1, :],
+                "candidateGrid": finalGrid[1].squeeze(0)
+                if finalGrid
+                else batch[Columns.STATE_IN]["candidateGrid"],
+                "hiddenGrid": finalGrid[0].squeeze(0)
+                if finalGrid
+                else batch[Columns.STATE_IN]["hiddenGrid"],
             },
             Columns.EMBEDDINGS: policyFeature,
-            "placeLogit": predictedPlaces,
-            "placeTarget": actualPlaces,
-            "reconstructedLatents": reconstructedLatent,
-            "actualLatents": latents,
         }
+        if predictedPlaces is not None:
+            output["placeLogit"] = predictedPlaces
+            output["placeTarget"] = actualPlaces
+
+        if reconstructedLatent is not None:
+            output["reconstructedLatents"] = reconstructedLatent
+            output["actualLatents"] = memory
+
+        if movements is not None:
+            output["movements"] = movements
+
+        return output
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _, _, _, _ = self._processPreHeads(batch)
+            embeddings, _, _, _, _, _, _ = self._processPreHeads(batch)
         return self.value_branch(embeddings).squeeze(-1)

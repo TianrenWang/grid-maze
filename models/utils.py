@@ -16,4 +16,4 @@ def calculatePlace(
         normalized_activations = torch.nn.functional.softmax(
             unnormalized_activations, dim=1
         )
-        return normalized_activations.reshape([*agentLocationShape[:2], numPlaceCells])
+        return normalized_activations.reshape([*agentLocationShape[:-1], numPlaceCells])

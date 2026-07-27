@@ -1,11 +1,8 @@
-from typing import Any, Dict
-
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModuleID
-
-import torch
 
 
 class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
@@ -15,8 +12,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         *,
         module_id: ModuleID,
         config: PPOConfig,
-        batch: Dict[str, Any],
-        fwd_out: Dict[str, torch.Tensor],
+        batch: dict[str, dict],
+        fwd_out: dict[str, torch.Tensor],
     ):
         if config.learner_config_dict.get("self_localize"):
             loss = 0
@@ -44,7 +41,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     "bmp,mpd->bmd", placeTarget, placeCells
                 )
 
-                # Reconstruction Loss
+            # Reconstruction Loss
+            if "actualLatents" in fwd_out and "reconstructedLatents" in fwd_out:
                 latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
                 reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
                     lossMask
@@ -58,6 +56,20 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
                 loss += reconstructionLoss
+
+            if "movements" in fwd_out:
+                movements: torch.Tensor = fwd_out["movements"][lossMask]
+                distances = torch.linalg.norm(movements, dim=1)
+                idealDistance = torch.mean(distances).detach()
+                movement_loss = torch.mean(
+                    ((distances - idealDistance) / idealDistance) ** 2
+                )
+                loss += movement_loss
+                self.metrics.log_value(
+                    key=(module_id, "movement_loss"),
+                    value=movement_loss.cpu().detach().numpy(),
+                    window=100,
+                )
 
             positionError = torch.mean(
                 torch.sqrt(

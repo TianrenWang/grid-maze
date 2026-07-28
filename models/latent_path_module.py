@@ -27,11 +27,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
 
-    @override(TorchRLModule)
-    def _forward_exploration(self, batch, **kwargs):
-        return self._forward(batch, **kwargs)
-
-    def _processPreHeads(self, batch):
+    def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
         initialMemory = self._getInitialMemory(
             lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
@@ -47,18 +43,39 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         memory = self._processVisualMemory(vision, initialMemory)
 
+        policy = self.policy_branch(memory)
+        value = self.value_branch(memory)
         predictedPlaces = None
         actualPlaces = None
         finalGridState = None
         reconstructedLatent = None
         movements = None
 
-        if self.model_config.get("self_localize", False):
+        def getOutputs():
+            return (
+                policy,
+                value,
+                predictedPlaces,
+                actualPlaces,
+                finalGridState,
+                memory.detach(),
+                reconstructedLatent,
+                movements,
+            )
+
+        selfLocalize = self.model_config.get("self_localize", False)
+        useIntegrationPolicy = self.model_config.get("integrationPolicy", False)
+        learnProjector = self.model_config.get("learn_projector", False)
+
+        if selfLocalize or useIntegrationPolicy:
             memory = memory.detach()
+            initialMemory = initialMemory.detach()
             sequenceProjections, reconstructedLatent = self.manifoldProjector(
                 torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
             )
             reconstructedLatent = reconstructedLatent[:, 1:, :]
+            if learnProjector:
+                return getOutputs()
             movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
             integratedCode, predictedPlaces, finalGridState = getIntegration(
                 sequenceProjections[:, 0, :], movements
@@ -66,55 +83,37 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             actualPlaces = calculatePlace(
                 self.placeCells, sequenceProjections[:, 1:, :]
             ).detach()
-            """
-            Doesn't make any sense to path integrate using artificially generated moves
-            because the abstract tasks downstream won't have access to a convenient
-            manifold to navigate smoothly in.
-            """
-            policyInput = memory
-        elif self.model_config.get("pretraining", False):
-            policyInput = memory
-        else:
-            integratedCode, _, _ = getIntegration()
-            gate = self.gridGate(memory.detach())
-            policyInput = (
-                memory * (1 - gate) + self.gridCompressor(integratedCode) * gate
-            )
+            if useIntegrationPolicy:
+                integration = self.gridCompressor(integratedCode)
+                policy = self.piPolicyPredictor(integration)
+                value = self.piValuePredictor(integration)
 
-        return (
-            policyInput,
-            predictedPlaces,
-            actualPlaces,
-            finalGridState,
-            memory.detach(),
-            reconstructedLatent,
-            movements,
-        )
+        return getOutputs()
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
         (
-            policyFeature,
+            policy,
+            value,
             predictedPlaces,
             actualPlaces,
-            finalGrid,
+            finalIntegrationState,
             memory,
             reconstructedLatent,
             movements,
         ) = self._processPreHeads(batch)
-        policy = self.policy_branch(policyFeature)
         output = {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
                 "hiddenObs": memory[:, -1, :],
-                "candidateGrid": finalGrid[1].squeeze(0)
-                if finalGrid
+                "candidateGrid": finalIntegrationState[1].squeeze(0)
+                if finalIntegrationState
                 else batch[Columns.STATE_IN]["candidateGrid"],
-                "hiddenGrid": finalGrid[0].squeeze(0)
-                if finalGrid
+                "hiddenGrid": finalIntegrationState[0].squeeze(0)
+                if finalIntegrationState
                 else batch[Columns.STATE_IN]["hiddenGrid"],
             },
-            Columns.EMBEDDINGS: policyFeature,
+            Columns.EMBEDDINGS: value,
         }
         if predictedPlaces is not None:
             output["placeLogit"] = predictedPlaces
@@ -132,5 +131,5 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            embeddings, _, _, _, _, _, _ = self._processPreHeads(batch)
-        return self.value_branch(embeddings).squeeze(-1)
+            _, embeddings, _, _, _, _, _, _ = self._processPreHeads(batch)
+        return embeddings.squeeze(-1)

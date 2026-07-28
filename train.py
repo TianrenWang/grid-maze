@@ -157,29 +157,24 @@ if __name__ == "__main__":
                     str(datetime.now())[:-7],  # noqa: DTZ005
                 )
                 if args.selfLocalize:
-                    predictionError = np.round(
-                        result["learners"]["default_policy"]["prediction_error"], 2
-                    )
-                    print("Prediction Error:", predictionError)
-                    positionError = np.round(
-                        result["learners"]["default_policy"]["position_error"], 2
-                    )
-                    print("Position Error:", positionError)
-                    if args.latentPath:
+                    trainingOutputs = result["learners"]["default_policy"]
+                    if "prediction_error" in trainingOutputs:
+                        predictionError = np.round(
+                            trainingOutputs["prediction_error"], 2
+                        )
+                        print("Prediction Error:", predictionError)
+                        positionError = np.round(trainingOutputs["position_error"], 2)
+                        print("Position Error:", positionError)
+
+                    if "reconstruction_loss" in trainingOutputs:
                         reconstructionLoss = np.round(
-                            result["learners"]["default_policy"]["reconstruction_loss"],
-                            2,
+                            trainingOutputs["reconstruction_loss"], 2
                         )
                         print("Reconstruction Loss:", reconstructionLoss)
-                        movementLoss = np.round(
-                            result["learners"]["default_policy"]["movement_loss"],
-                            2,
-                        )
+
+                    if "movement_loss" in trainingOutputs:
+                        movementLoss = np.round(trainingOutputs["movement_loss"], 2)
                         print("Movement Loss:", movementLoss)
-                    # placeBias = np.round(
-                    #     result["learners"]["default_policy"]["place_bias"], 2
-                    # )
-                    # print("Place Bias:", placeBias)
                 else:
                     averageReturn = 0
                     averageSteps = 0

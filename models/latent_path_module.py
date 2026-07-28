@@ -64,29 +64,35 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         selfLocalize = self.model_config.get("self_localize", False)
-        useIntegrationPolicy = self.model_config.get("integrationPolicy", False)
-        learnProjector = self.model_config.get("learn_projector", False)
+        learnManifold = self.model_config.get("learnManifold", False)
 
-        if selfLocalize or useIntegrationPolicy:
-            memory = memory.detach()
-            initialMemory = initialMemory.detach()
-            sequenceProjections, reconstructedLatent = self.manifoldProjector(
-                torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
-            )
-            reconstructedLatent = reconstructedLatent[:, 1:, :]
-            if learnProjector:
-                return getOutputs()
-            movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
-            integratedCode, predictedPlaces, finalGridState = getIntegration(
-                sequenceProjections[:, 0, :], movements
-            )
-            actualPlaces = calculatePlace(
-                self.placeCells, sequenceProjections[:, 1:, :]
-            ).detach()
-            if useIntegrationPolicy:
-                integration = self.gridCompressor(integratedCode)
-                policy = self.piPolicyPredictor(integration)
-                value = self.piValuePredictor(integration)
+        if self.model_config.get("pretraining", False):
+            return getOutputs()
+
+        memory = memory.detach()
+        initialMemory = initialMemory.detach()
+        sequenceProjections, reconstructedLatent = self.manifoldProjector(
+            torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
+        )
+        reconstructedLatent = reconstructedLatent[:, 1:, :]
+
+        if learnManifold:
+            return getOutputs()
+
+        movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
+        integratedCode, predictedPlaces, finalGridState = getIntegration(
+            sequenceProjections[:, 0, :], movements
+        )
+        actualPlaces = calculatePlace(
+            self.placeCells, sequenceProjections[:, 1:, :]
+        ).detach()
+
+        if selfLocalize:
+            return getOutputs()
+
+        integration = self.gridCompressor(integratedCode)
+        policy = self.piPolicyPredictor(integration)
+        value = self.piValuePredictor(integration)
 
         return getOutputs()
 

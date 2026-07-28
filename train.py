@@ -36,6 +36,7 @@ parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
 parser.add_argument("--entropy", type=float, default=0.1)
 parser.add_argument("--visionPolicy", action="store_true")
+parser.add_argument("--learnManifold", action="store_true")
 args = parser.parse_args()
 
 if args.pretraining:
@@ -117,6 +118,7 @@ if __name__ == "__main__":
                     "self_localize": args.selfLocalize,
                     "pretraining": args.pretraining,
                     "visionPolicy": args.visionPolicy,
+                    "learnManifold": args.learnManifold,
                 },
             ),
         )

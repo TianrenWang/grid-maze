@@ -32,14 +32,14 @@ parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", action="store_true")
 parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
-parser.add_argument("--pretraining", action="store_true")
+parser.add_argument("--pretrain", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
 parser.add_argument("--entropy", type=float, default=0.1)
 parser.add_argument("--visionPolicy", action="store_true")
 parser.add_argument("--learnManifold", action="store_true")
 args = parser.parse_args()
 
-if args.pretraining:
+if args.pretrain or args.learnManifold:
     args.latentPath = True
 
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
-                    "pretraining": args.pretraining,
+                    "pretrain": args.pretrain,
                     "visionPolicy": args.visionPolicy,
                     "learnManifold": args.learnManifold,
                 },

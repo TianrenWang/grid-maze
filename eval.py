@@ -17,15 +17,11 @@ parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--grid", action="store_true")
 parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--latentPath", action="store_true")
-parser.add_argument("--pretraining", action="store_true")
 parser.add_argument("--perturb", action="store_true")
 parser.add_argument("--visionPolicy", action="store_true")
 parser.add_argument("--integrationPolicy", action="store_true")
 parser.add_argument("--debug", type=int, default=0)
 args = parser.parse_args()
-
-if args.pretraining:
-    args.latentPath = True
 
 
 def usesGrid():

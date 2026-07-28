@@ -1,4 +1,5 @@
 import torch
+from ema_pytorch import EMA
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
@@ -26,6 +27,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
+        self.EMAProjector = EMA(
+            self.manifoldProjector, beta=0.9999, update_after_step=100, update_every=10
+        )
 
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
@@ -66,7 +70,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         selfLocalize = self.model_config.get("self_localize", False)
         learnManifold = self.model_config.get("learnManifold", False)
 
-        if self.model_config.get("pretraining", False):
+        if self.model_config.get("pretrain", False):
             return getOutputs()
 
         memory = memory.detach()
@@ -83,11 +87,11 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         integratedCode, predictedPlaces, finalGridState = getIntegration(
             sequenceProjections[:, 0, :], movements
         )
-        actualPlaces = calculatePlace(
-            self.placeCells, sequenceProjections[:, 1:, :]
-        ).detach()
 
         if selfLocalize:
+            actualPlaces = calculatePlace(
+                self.placeCells, self.EMAProjector(memory)
+            ).detach()
             return getOutputs()
 
         integration = self.gridCompressor(integratedCode)
@@ -107,7 +111,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             memory,
             reconstructedLatent,
             movements,
-        ) = self._processPreHeads(batch)
+        ) = self._getPolicyAndValue(batch)
         output = {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
@@ -137,5 +141,5 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            _, embeddings, _, _, _, _, _, _ = self._processPreHeads(batch)
+            _, embeddings, _, _, _, _, _, _ = self._getPolicyAndValue(batch)
         return embeddings.squeeze(-1)

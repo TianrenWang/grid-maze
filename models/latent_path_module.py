@@ -90,7 +90,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         if selfLocalize:
             actualPlaces = calculatePlace(
-                self.placeCells, self.EMAProjector(memory)
+                self.placeCells, self.EMAProjector(memory)[0]
             ).detach()
             return getOutputs()
 

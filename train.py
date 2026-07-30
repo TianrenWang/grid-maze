@@ -1,7 +1,12 @@
 import argparse
+import logging
 import os
 import pickle
 from datetime import datetime
+
+logging.getLogger("ray.rllib.algorithms.ppo.torch.ppo_torch_learner").setLevel(
+    logging.ERROR
+)
 
 import numpy as np
 import torch

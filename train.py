@@ -24,7 +24,7 @@ parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
 parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
-parser.add_argument("--maxSteps", type=int, default=1000)
+parser.add_argument("--maxSteps", type=int, default=200)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=4000)
@@ -176,11 +176,9 @@ if __name__ == "__main__":
                         positionError = np.round(trainingOutputs["position_error"], 2)
                         print("Position Error:", positionError)
 
-                    if "reconstruction_loss" in trainingOutputs:
-                        reconstructionLoss = np.round(
-                            trainingOutputs["reconstruction_loss"], 2
-                        )
-                        print("Reconstruction Loss:", reconstructionLoss)
+                    if "jepa_loss" in trainingOutputs:
+                        jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
+                        print("JEPA Loss:", jepaLoss)
 
                     if "movement_loss" in trainingOutputs:
                         movementLoss = np.round(trainingOutputs["movement_loss"], 2)

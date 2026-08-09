@@ -65,20 +65,14 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
-            if "actualLatents" in fwd_out and "reconstructedLatents" in fwd_out:
-                latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
-                reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
-                    lossMask
-                ]
-                reconstructionLoss = torch.nn.functional.mse_loss(
-                    reconstructedLatents, latents
-                )
+            if "jepaLoss" in fwd_out:
+                jepaLoss: torch.Tensor = fwd_out["jepaLoss"][lossMask].mean()
                 self.metrics.log_value(
-                    key=(module_id, "reconstruction_loss"),
-                    value=reconstructionLoss.cpu().detach().numpy(),
+                    key=(module_id, "jepa_loss"),
+                    value=jepaLoss.cpu().detach().numpy(),
                     window=100,
                 )
-                loss += reconstructionLoss
+                loss += jepaLoss
 
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]

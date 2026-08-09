@@ -126,7 +126,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if controlOutputs.jepaMemory is None:
             stateOut["jepaMemory"] = stateIn["jepaMemory"]
         else:
-            stateOut["jepaMemory"] = controlOutputs.jepaMemory.squeeze(0)
+            stateOut["jepaMemory"] = controlOutputs.jepaMemory[:, -1, :]
 
         if type(controlOutputs.predictedPlaces) is torch.Tensor:
             finalOutput["placeLogit"] = controlOutputs.predictedPlaces

@@ -1,8 +1,13 @@
+from typing import Any
+
 import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
+from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModuleID
+
+import models
 
 
 class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
@@ -96,3 +101,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 batch=batch,
                 fwd_out=fwd_out,
             )
+
+    @override(PPOTorchLearner)
+    def apply_gradients(self, gradients_dict: dict[str, Any]) -> None:
+        super().apply_gradients(gradients_dict)
+        latentPathModule: models.LatentPathModule = self.module[DEFAULT_MODULE_ID]
+        latentPathModule.jepa.EMAEncoder.update()

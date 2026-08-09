@@ -20,7 +20,6 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         self.primaryConvModule = SimpleConv(self.hiddenSize)
         self.primaryConvModuleOutSize = ((self.inputSize + 1) // 2 + 1) // 2
         self.prePredictionHead = nn.Sequential(
-            nn.Flatten(),
             nn.Linear(
                 self.primaryConvModuleOutSize**2 * self.hiddenSize * 2,
                 self.linearHiddenSize,
@@ -62,12 +61,8 @@ class MemoryMazeModule(SimpleMazeModule):
         return {"hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32)}
 
     def _processConvolution(self, vision) -> torch.Tensor:
-        visionShape = vision.shape
-        vision = vision.reshape(-1, *visionShape[2:])
-        vision = vision.permute(0, 3, 1, 2).to(torch.float32)
-        visionFeatures = self.primaryConvModule(vision)
+        visionFeatures = self.primaryConvModule.forward(vision).flatten(2)
         visionFeatures = self.prePredictionHead(visionFeatures)
-        visionFeatures = visionFeatures.reshape(*visionShape[:2], self.linearHiddenSize)
         return visionFeatures
 
     def _processPreHeads(self, batch):
@@ -177,10 +172,7 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
             finalIntegrationState,
         )
 
-    def _getInitialMemory(self, lastLocation: torch.Tensor, memoryState: torch.Tensor):
-        prevPlaces = self.placeEncoderForMemory(
-            calculatePlace(self.placeCells, lastLocation)
-        )
+    def _getInitialMemory(self, prevPlaces: torch.Tensor, memoryState: torch.Tensor):
         initialPlaceMask = torch.sum(memoryState, 1) == 0
         return torch.where(initialPlaceMask[:, None], prevPlaces, memoryState)
 
@@ -212,8 +204,11 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
                 policy = self.piPolicyPredictor(integration)
                 value = self.piValuePredictor(integration)
         elif useVisionPolicy:
+            prevPlaces = self.placeEncoderForMemory(
+                calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
+            )
             initialState = self._getInitialMemory(
-                lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+                prevPlaces, batch[Columns.STATE_IN]["hiddenObs"]
             )
             memory = self._processVisualMemory(vision, initialState)
             policy = self.policy_branch(memory)
@@ -307,8 +302,11 @@ class PathIntegrationWithVisionModuleForEval(PathIntegrationWithVisionModule):
             )
 
         def getVisualMemory():
+            prevPlaces = self.placeEncoderForMemory(
+                calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
+            )
             initialState = self._getInitialMemory(
-                lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+                prevPlaces, batch[Columns.STATE_IN]["hiddenObs"]
             )
             return self._processVisualMemory(vision, initialState)
 

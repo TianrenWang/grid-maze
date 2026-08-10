@@ -35,8 +35,8 @@ class JEPA(nn.Module):
         )
 
     def forward(self, vision: torch.Tensor, initialMemory: torch.Tensor):
-        encodedVision = self.visionEncoder(vision)
-        memory, _ = self.memory(encodedVision, initialMemory)
+        contextLatent = self.encoder(vision)
+        memory, _ = self.memory(contextLatent, initialMemory.unsqueeze(0))
         return memory
 
     def forward_train(

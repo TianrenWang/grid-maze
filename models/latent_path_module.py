@@ -33,8 +33,11 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        prevPlaces = self.placeEncoderForMemory(
+            calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
+        )
         initialMemory = self._getInitialMemory(
-            lastAgentLocation[:, 0, :], batch[Columns.STATE_IN]["hiddenObs"]
+            prevPlaces, batch[Columns.STATE_IN]["hiddenObs"]
         )
 
         def getIntegration(startingCoordinate: torch.Tensor, movement: torch.Tensor):

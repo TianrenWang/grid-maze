@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
-parser.add_argument("--hiddenSize", type=int, default=32)
+parser.add_argument("--hiddenSize", type=int, default=8)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=200)
 parser.add_argument("--lr", type=float, default=1e-5)
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     mazesPath = "mazes"
     visionRange = 4
     maze = None
+    evalMaxSteps = 200
 
     if args.selfLocalize:
         maze = generateMaze(mazeSize, 0)
@@ -108,6 +109,10 @@ if __name__ == "__main__":
         "debugging": args.debug,
     }
 
+    environmentEvalConfig = environmentConfig.copy()
+    environmentEvalConfig["eval"] = True
+    environmentEvalConfig["maxSteps"] = evalMaxSteps
+
     agentConfig = (
         PPOConfig()
         .environment(env)
@@ -135,6 +140,7 @@ if __name__ == "__main__":
             evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
             evaluation_duration=1 if args.debug else 128,
+            evaluation_config={"env_config": environmentEvalConfig},
         )
         .training(
             lr=args.lr,
@@ -195,6 +201,6 @@ if __name__ == "__main__":
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)
                     numSamples = (
-                        int((args.maxSteps - averageSteps) / args.maxSteps * 10) + 1
+                        int((evalMaxSteps - averageSteps) / evalMaxSteps * 10) + 1
                     )
                 agent.save(checkpointPath)

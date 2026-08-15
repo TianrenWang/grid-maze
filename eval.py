@@ -10,7 +10,7 @@ from environments import PlaceMazeEnv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
-parser.add_argument("--hiddenSize", type=int, default=32)
+parser.add_argument("--hiddenSize", type=int, default=8)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--grid", action="store_true")

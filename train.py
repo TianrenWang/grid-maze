@@ -172,8 +172,9 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],  # noqa: DTZ005
                 )
+
+                trainingOutputs = result["learners"]["default_policy"]
                 if args.selfLocalize or args.learnManifold:
-                    trainingOutputs = result["learners"]["default_policy"]
                     if "prediction_error" in trainingOutputs:
                         predictionError = np.round(
                             trainingOutputs["prediction_error"], 2
@@ -181,15 +182,15 @@ if __name__ == "__main__":
                         print("Prediction Error:", predictionError)
                         positionError = np.round(trainingOutputs["position_error"], 2)
                         print("Position Error:", positionError)
-
-                    if "jepa_loss" in trainingOutputs:
-                        jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
-                        print("JEPA Loss:", jepaLoss)
+                else:
+                    if "inhibition_loss" in trainingOutputs:
+                        jepaLoss = np.round(trainingOutputs["inhibition_loss"], 2)
+                        print("Inhibition Loss:", jepaLoss)
 
                     if "movement_loss" in trainingOutputs:
                         movementLoss = np.round(trainingOutputs["movement_loss"], 2)
                         print("Movement Loss:", movementLoss)
-                else:
+
                     averageReturn = 0
                     averageSteps = 0
                     for j in range(numSamples):

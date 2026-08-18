@@ -1,5 +1,4 @@
 import torch
-from ema_pytorch import EMA
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
@@ -26,10 +25,11 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
-        self.EMAProjector = EMA(
-            self.manifoldProjector, beta=0.9999, update_after_step=100, update_every=10
+        self.place_projector = nn.Sequential(
+            nn.Linear(self.linearHiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
         )
+        self.policy_branch = nn.Linear(self.numPlaceCells, self.action_space.n)
+        self.value_branch = nn.Linear(self.numPlaceCells, 1)
 
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
@@ -49,14 +49,17 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
-
-        policy = self.policy_branch(memory)
-        value = self.value_branch(memory)
+        placeActivation = self.place_projector(
+            torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
+        )
+        manifoldCoordinates = torch.matmul(placeActivation, self.placeCells)
+        movements = torch.diff(manifoldCoordinates, dim=1)
+        controlInputs = placeActivation[:, 1:, :]
+        policy = self.policy_branch(controlInputs)
+        value = self.value_branch(controlInputs)
         predictedPlaces = None
         actualPlaces = None
         finalGridState = None
-        reconstructedLatent = None
-        movements = None
 
         def getOutputs():
             return (
@@ -66,7 +69,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 actualPlaces,
                 finalGridState,
                 memory.detach(),
-                reconstructedLatent,
+                controlInputs,
                 movements,
             )
 
@@ -78,10 +81,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         memory = memory.detach()
         initialMemory = initialMemory.detach()
-        sequenceProjections, reconstructedLatent = self.manifoldProjector(
+        sequenceProjections, controlInputs = self.manifoldProjector(
             torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
         )
-        reconstructedLatent = reconstructedLatent[:, 1:, :]
+        controlInputs = controlInputs[:, 1:, :]
 
         if learnManifold:
             return getOutputs()
@@ -112,7 +115,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             actualPlaces,
             finalIntegrationState,
             memory,
-            reconstructedLatent,
+            projectedPlaces,
             movements,
         ) = self._getPolicyAndValue(batch)
         output = {
@@ -132,9 +135,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             output["placeLogit"] = predictedPlaces
             output["placeTarget"] = actualPlaces
 
-        if reconstructedLatent is not None:
-            output["reconstructedLatents"] = reconstructedLatent
-            output["actualLatents"] = memory
+        if projectedPlaces is not None:
+            output["projectedPlaces"] = projectedPlaces
 
         if movements is not None:
             output["movements"] = movements

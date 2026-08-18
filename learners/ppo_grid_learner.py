@@ -15,17 +15,17 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: dict[str, dict],
         fwd_out: dict[str, torch.Tensor],
     ):
+        lossMask = batch["loss_mask"]
+        parameters = self.module[module_id].named_parameters()
+        placeCells = None
+        for name, weight in parameters:
+            if name == "placeCells":
+                placeCells = weight
+
         if config.learner_config_dict.get("self_localize"):
             loss = 0
-            lossMask = batch["loss_mask"]
 
             if "placeLogit" in fwd_out and "placeTarget" in fwd_out:
-                parameters = self.module[module_id].named_parameters()
-                placeCells = None
-                for name, weight in parameters:
-                    if name == "placeCells":
-                        placeCells = weight
-
                 placeLogit = fwd_out["placeLogit"][lossMask]
                 placeTarget = fwd_out["placeTarget"][lossMask]
                 predictions = torch.nn.functional.softmax(placeLogit, -1)
@@ -65,25 +65,20 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
-            if "actualLatents" in fwd_out and "reconstructedLatents" in fwd_out:
-                latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
-                reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
-                    lossMask
-                ]
-                reconstructionLoss = torch.nn.functional.mse_loss(
-                    reconstructedLatents, latents
-                )
-                self.metrics.log_value(
-                    key=(module_id, "reconstruction_loss"),
-                    value=reconstructionLoss.cpu().detach().numpy(),
-                    window=100,
-                )
-                loss += reconstructionLoss
+            return loss
+        else:
+            loss = super().compute_loss_for_module(
+                module_id=module_id,
+                config=config,
+                batch=batch,
+                fwd_out=fwd_out,
+            )
 
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]
                 distances = torch.linalg.norm(movements, dim=1)
-                idealDistance = torch.mean(distances).detach()
+                # idealDistance = torch.mean(distances).detach()
+                idealDistance = 1 / 30  # switch to the other loss when I am ready
                 movement_loss = torch.mean(
                     ((distances - idealDistance) / idealDistance) ** 2
                 )
@@ -94,11 +89,17 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
+            if "projectedPlaces" in fwd_out:
+                projectedPlaces: torch.Tensor = fwd_out["projectedPlaces"][lossMask]
+                mean_center = projectedPlaces @ placeCells
+                mean_sq_norm = projectedPlaces @ (placeCells**2).sum(dim=-1)
+                variance = mean_sq_norm - (mean_center**2).sum(dim=-1)
+                inhibitionLoss = 2 * variance.mean()
+                self.metrics.log_value(
+                    key=(module_id, "inhibition_loss"),
+                    value=inhibitionLoss.cpu().detach().numpy(),
+                    window=100,
+                )
+                loss += inhibitionLoss
+
             return loss
-        else:
-            return super().compute_loss_for_module(
-                module_id=module_id,
-                config=config,
-                batch=batch,
-                fwd_out=fwd_out,
-            )

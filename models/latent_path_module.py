@@ -49,14 +49,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
-        placeActivation = self.place_projector(
-            torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
-        )
-        manifoldCoordinates = torch.matmul(placeActivation, self.placeCells)
-        movements = torch.diff(manifoldCoordinates, dim=1)
-        controlInputs = placeActivation[:, 1:, :]
-        policy = self.policy_branch(controlInputs)
-        value = self.value_branch(controlInputs)
+        placeActivation = self.place_projector(memory)
+        movements = None
+        policy = self.policy_branch(placeActivation)
+        value = self.value_branch(placeActivation)
         predictedPlaces = None
         actualPlaces = None
         finalGridState = None
@@ -69,7 +65,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 actualPlaces,
                 finalGridState,
                 memory.detach(),
-                controlInputs,
+                placeActivation,
                 movements,
             )
 
@@ -79,19 +75,18 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if self.model_config.get("pretrain", False):
             return getOutputs()
 
-        memory = memory.detach()
-        initialMemory = initialMemory.detach()
-        sequenceProjections, controlInputs = self.manifoldProjector(
-            torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
+        initialPlaceActivation = self.place_projector(initialMemory)
+        manifoldCoordinates = torch.matmul(
+            torch.concat([initialPlaceActivation.unsqueeze(1), placeActivation], dim=1),
+            self.placeCells,
         )
-        controlInputs = controlInputs[:, 1:, :]
+        movements = torch.diff(manifoldCoordinates, dim=1)
 
         if learnManifold:
             return getOutputs()
 
-        movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
         integratedCode, predictedPlaces, finalGridState = getIntegration(
-            sequenceProjections[:, 0, :], movements
+            initialPlaceActivation, movements
         )
 
         if selfLocalize:

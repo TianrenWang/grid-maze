@@ -47,9 +47,6 @@ args = parser.parse_args()
 if args.pretrain or args.learnManifold:
     args.latentPath = True
 
-if args.learnManifold:
-    args.selfLocalize = True
-
 
 def usesGrid():
     return args.grid or args.selfLocalize or args.latentPath or args.pureCode
@@ -174,7 +171,7 @@ if __name__ == "__main__":
                 )
 
                 trainingOutputs = result["learners"]["default_policy"]
-                if args.selfLocalize or args.learnManifold:
+                if args.selfLocalize:
                     if "prediction_error" in trainingOutputs:
                         predictionError = np.round(
                             trainingOutputs["prediction_error"], 2

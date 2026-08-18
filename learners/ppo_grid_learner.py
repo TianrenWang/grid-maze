@@ -94,6 +94,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 mean_center = projectedPlaces @ placeCells
                 mean_sq_norm = projectedPlaces @ (placeCells**2).sum(dim=-1)
                 variance = mean_sq_norm - (mean_center**2).sum(dim=-1)
+                variance = torch.where(variance < 0.01, 0.0, variance)
                 inhibitionLoss = 2 * variance.mean()
                 self.metrics.log_value(
                     key=(module_id, "inhibition_loss"),

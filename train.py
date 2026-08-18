@@ -180,9 +180,11 @@ if __name__ == "__main__":
                         positionError = np.round(trainingOutputs["position_error"], 2)
                         print("Position Error:", positionError)
                 else:
-                    if "inhibition_loss" in trainingOutputs:
-                        jepaLoss = np.round(trainingOutputs["inhibition_loss"], 2)
-                        print("Inhibition Loss:", jepaLoss)
+                    if "inhibition_error" in trainingOutputs:
+                        inhibitionError = np.round(
+                            trainingOutputs["inhibition_error"], 2
+                        )
+                        print("Inhibition Error:", inhibitionError)
 
                     if "movement_loss" in trainingOutputs:
                         movementLoss = np.round(trainingOutputs["movement_loss"], 2)

@@ -100,9 +100,12 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 inhibitionLoss = torch.nn.functional.cross_entropy(
                     projectedPlaces, inhibitedActivation
                 )
+                inhibitionError = torch.mean(
+                    torch.sum(torch.abs(inhibitedActivation - projectedPlaces), -1)
+                )
                 self.metrics.log_value(
-                    key=(module_id, "inhibition_loss"),
-                    value=inhibitionLoss.cpu().detach().numpy(),
+                    key=(module_id, "inhibition_error"),
+                    value=inhibitionError.cpu().detach().numpy(),
                     window=100,
                 )
                 loss += inhibitionLoss

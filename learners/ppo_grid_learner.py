@@ -4,8 +4,6 @@ from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModuleID
 
-from models.utils import calculatePlace
-
 
 class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     @override(PPOTorchLearner)
@@ -90,24 +88,5 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     value=movement_loss.cpu().detach().numpy(),
                     window=100,
                 )
-
-            if "projectedPlaces" in fwd_out:
-                projectedPlaces: torch.Tensor = fwd_out["projectedPlaces"][lossMask]
-                actualCoordinates = projectedPlaces.detach() @ placeCells
-                inhibitedActivation = calculatePlace(
-                    placeCells, actualCoordinates, self.module[module_id].fieldSize
-                )
-                inhibitionLoss = torch.nn.functional.cross_entropy(
-                    projectedPlaces, inhibitedActivation
-                )
-                inhibitionError = torch.mean(
-                    torch.sum(torch.abs(inhibitedActivation - projectedPlaces), -1)
-                )
-                self.metrics.log_value(
-                    key=(module_id, "inhibition_error"),
-                    value=inhibitionError.cpu().detach().numpy(),
-                    window=100,
-                )
-                loss += inhibitionLoss
 
             return loss

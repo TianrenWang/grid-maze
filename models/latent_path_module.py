@@ -31,6 +31,14 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.policy_branch = nn.Linear(self.numPlaceCells, self.action_space.n)
         self.value_branch = nn.Linear(self.numPlaceCells, 1)
 
+    def _getPlaceActivationFromMemory(self, memory: torch.Tensor) -> torch.Tensor:
+        placeActivation = self.place_projector(memory)
+        return calculatePlace(
+            self.placeCells,
+            torch.matmul(placeActivation, self.placeCells),
+            self.fieldSize,
+        )
+
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
         prevPlaces = self.placeEncoderForMemory(
@@ -49,7 +57,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
-        placeActivation = self.place_projector(memory)
+        placeActivation = self._getPlaceActivationFromMemory(memory)
         movements = None
         policy = self.policy_branch(placeActivation)
         value = self.value_branch(placeActivation)
@@ -65,7 +73,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 actualPlaces,
                 finalGridState,
                 memory.detach(),
-                placeActivation,
                 movements,
             )
 
@@ -110,7 +117,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             actualPlaces,
             finalIntegrationState,
             memory,
-            projectedPlaces,
             movements,
         ) = self._getPolicyAndValue(batch)
         output = {
@@ -130,9 +136,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             output["placeLogit"] = predictedPlaces
             output["placeTarget"] = actualPlaces
 
-        if projectedPlaces is not None:
-            output["projectedPlaces"] = projectedPlaces
-
         if movements is not None:
             output["movements"] = movements
 
@@ -141,5 +144,5 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            _, embeddings, _, _, _, _, _, _ = self._getPolicyAndValue(batch)
+            _, embeddings, _, _, _, _, _ = self._getPolicyAndValue(batch)
         return embeddings.squeeze(-1)

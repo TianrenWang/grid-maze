@@ -1,7 +1,12 @@
 import argparse
+import logging
 import os
 import pickle
 from datetime import datetime
+
+logging.getLogger("ray.rllib.algorithms.ppo.torch.ppo_torch_learner").setLevel(
+    logging.ERROR
+)
 
 import numpy as np
 import torch
@@ -17,9 +22,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
-parser.add_argument("--hiddenSize", type=int, default=32)
+parser.add_argument("--hiddenSize", type=int, default=8)
 parser.add_argument("--numLayers", type=int, default=2)
-parser.add_argument("--maxSteps", type=int, default=1000)
+parser.add_argument("--maxSteps", type=int, default=200)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=4000)
@@ -32,14 +37,18 @@ parser.add_argument("--memoryLen", type=int, default=20)
 parser.add_argument("--debug", action="store_true")
 parser.add_argument("--gps", action="store_true")
 parser.add_argument("--latentPath", action="store_true")
-parser.add_argument("--pretraining", action="store_true")
+parser.add_argument("--pretrain", action="store_true")
 parser.add_argument("--pureCode", action="store_true")
 parser.add_argument("--entropy", type=float, default=0.1)
 parser.add_argument("--visionPolicy", action="store_true")
+parser.add_argument("--learnManifold", action="store_true")
 args = parser.parse_args()
 
-if args.pretraining:
+if args.pretrain or args.learnManifold:
     args.latentPath = True
+
+if args.learnManifold:
+    args.selfLocalize = True
 
 
 def usesGrid():
@@ -52,6 +61,7 @@ if __name__ == "__main__":
     mazesPath = "mazes"
     visionRange = 4
     maze = None
+    evalMaxSteps = 200
 
     if args.selfLocalize:
         maze = generateMaze(mazeSize, 0)
@@ -99,6 +109,10 @@ if __name__ == "__main__":
         "debugging": args.debug,
     }
 
+    environmentEvalConfig = environmentConfig.copy()
+    environmentEvalConfig["eval"] = True
+    environmentEvalConfig["maxSteps"] = evalMaxSteps
+
     agentConfig = (
         PPOConfig()
         .environment(env)
@@ -115,8 +129,9 @@ if __name__ == "__main__":
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
-                    "pretraining": args.pretraining,
+                    "pretrain": args.pretrain,
                     "visionPolicy": args.visionPolicy,
+                    "learnManifold": args.learnManifold,
                 },
             ),
         )
@@ -125,6 +140,7 @@ if __name__ == "__main__":
             evaluation_num_env_runners=1 if args.debug else 8,
             evaluation_duration_unit="episodes",
             evaluation_duration=1 if args.debug else 128,
+            evaluation_config={"env_config": environmentEvalConfig},
         )
         .training(
             lr=args.lr,
@@ -156,30 +172,23 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],  # noqa: DTZ005
                 )
-                if args.selfLocalize:
-                    predictionError = np.round(
-                        result["learners"]["default_policy"]["prediction_error"], 2
-                    )
-                    print("Prediction Error:", predictionError)
-                    positionError = np.round(
-                        result["learners"]["default_policy"]["position_error"], 2
-                    )
-                    print("Position Error:", positionError)
-                    if args.latentPath:
-                        reconstructionLoss = np.round(
-                            result["learners"]["default_policy"]["reconstruction_loss"],
-                            2,
+                if args.selfLocalize or args.learnManifold:
+                    trainingOutputs = result["learners"]["default_policy"]
+                    if "prediction_error" in trainingOutputs:
+                        predictionError = np.round(
+                            trainingOutputs["prediction_error"], 2
                         )
-                        print("Reconstruction Loss:", reconstructionLoss)
-                        movementLoss = np.round(
-                            result["learners"]["default_policy"]["movement_loss"],
-                            2,
-                        )
+                        print("Prediction Error:", predictionError)
+                        positionError = np.round(trainingOutputs["position_error"], 2)
+                        print("Position Error:", positionError)
+
+                    if "jepa_loss" in trainingOutputs:
+                        jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
+                        print("JEPA Loss:", jepaLoss)
+
+                    if "movement_loss" in trainingOutputs:
+                        movementLoss = np.round(trainingOutputs["movement_loss"], 2)
                         print("Movement Loss:", movementLoss)
-                    # placeBias = np.round(
-                    #     result["learners"]["default_policy"]["place_bias"], 2
-                    # )
-                    # print("Place Bias:", placeBias)
                 else:
                     averageReturn = 0
                     averageSteps = 0
@@ -192,6 +201,6 @@ if __name__ == "__main__":
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)
                     numSamples = (
-                        int((args.maxSteps - averageSteps) / args.maxSteps * 10) + 1
+                        int((evalMaxSteps - averageSteps) / evalMaxSteps * 10) + 1
                     )
                 agent.save(checkpointPath)

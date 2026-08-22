@@ -89,4 +89,27 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
+            if "rewards" in fwd_out:
+                nonRewardMask = fwd_out["rewards"] != 0
+                manifold = fwd_out["manifold"]
+                rewardedCoordinates = manifold[nonRewardMask]
+                if rewardedCoordinates.numel() != 0:
+                    # likelyLandmarkCoordinate = torch.mean(
+                    #     rewardedCoordinates, dim=0
+                    # ).detach()
+                    coherenceLoss = torch.nn.functional.l1_loss(
+                        rewardedCoordinates,
+                        torch.tensor(
+                            [[0.5, 0.5]],
+                            dtype=torch.float32,
+                            device=rewardedCoordinates.device,
+                        ).expand_as(rewardedCoordinates),
+                    )
+                    loss += coherenceLoss
+                    self.metrics.log_value(
+                        key=(module_id, "coherence_loss"),
+                        value=coherenceLoss.cpu().detach().numpy(),
+                        window=100,
+                    )
+
             return loss

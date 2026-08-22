@@ -26,10 +26,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.manifoldProjector = nn.Sequential(
-            nn.Linear(self.linearHiddenSize, self.hiddenSize),
-            nn.ReLU(),
-            nn.Linear(self.hiddenSize, 2),
-            nn.Sigmoid(),
+            nn.Linear(self.linearHiddenSize, 2), nn.Sigmoid()
         )
         self.manifoldPolicy = nn.Linear(2, self.action_space.n)
         self.manifoldValue = nn.Linear(2, 1)
@@ -78,8 +75,13 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if self.model_config.get("pretrain", False):
             return getOutputs()
 
-        memory = memory.detach()
-        initialManifoldCoordinate = self.manifoldProjector(initialMemory.detach())
+        initialManifoldCoordinate = self.manifoldProjector(initialMemory)
+        initialPlaceMask = torch.sum(batch[Columns.STATE_IN]["hiddenObs"], 1) == 0
+        initialManifoldCoordinate = torch.where(
+            initialPlaceMask[:, None],
+            lastAgentLocation[:, 0, :],
+            initialManifoldCoordinate,
+        )
         manifoldCoordinates = self.manifoldProjector(memory)
         movements = torch.diff(
             torch.concat(
@@ -145,6 +147,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         if manifold is not None:
             output["manifold"] = manifold
+            if "rewards" in batch:
+                rewards = batch["rewards"]
+                output["rewards"] = rewards
 
         return output
 

@@ -23,6 +23,7 @@ parser.add_argument("--mazeSize", type=int, default=30)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
 parser.add_argument("--hiddenSize", type=int, default=8)
+parser.add_argument("--numPlaceCells", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
 parser.add_argument("--maxSteps", type=int, default=200)
 parser.add_argument("--lr", type=float, default=1e-5)
@@ -121,6 +122,7 @@ if __name__ == "__main__":
                 module_class=module,
                 model_config={
                     "hiddenSize": args.hiddenSize,
+                    "numPlaceCells": args.numPlaceCells,
                     "numLayers": args.numLayers,
                     "inputSize": visionRange * 2 + 1 if args.fogged else mazeSize,
                     "max_seq_len": args.memoryLen,

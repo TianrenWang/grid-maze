@@ -59,7 +59,6 @@ if __name__ == "__main__":
     mazesPath = "mazes"
     visionRange = 4
     maze = None
-    evalMaxSteps = 200
 
     if args.selfLocalize:
         maze = generateMaze(mazeSize, 0)
@@ -109,7 +108,6 @@ if __name__ == "__main__":
 
     environmentEvalConfig = environmentConfig.copy()
     environmentEvalConfig["eval"] = True
-    environmentEvalConfig["maxSteps"] = evalMaxSteps
 
     agentConfig = (
         PPOConfig()
@@ -162,7 +160,7 @@ if __name__ == "__main__":
         for i in range(10):
             agent.evaluate()
     else:
-        numSamples = 1
+        numSamples = 10
         for i in range(args.numLearn):
             result = agent.train()
             if i == 0 or (i + 1) % args.evalInterval == 0:
@@ -200,7 +198,4 @@ if __name__ == "__main__":
                     print("Performance:", averageReturn)
                     averageSteps = round(averageSteps / numSamples, 0)
                     print("Steps:", averageSteps)
-                    numSamples = (
-                        int((evalMaxSteps - averageSteps) / evalMaxSteps * 10) + 1
-                    )
                 agent.save(checkpointPath)

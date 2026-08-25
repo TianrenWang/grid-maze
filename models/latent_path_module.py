@@ -5,6 +5,8 @@ from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.utils.annotations import override
 from torch import nn
 
+torch.set_printoptions(precision=2)
+
 from .agent_models import PathIntegrationWithVisionModule
 from .utils import calculatePlace
 
@@ -25,16 +27,24 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.manifoldProjector = nn.Sequential(
-            nn.Linear(self.linearHiddenSize, 2), nn.Sigmoid()
+        self.place_projector = nn.Sequential(
+            nn.Linear(self.linearHiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
         )
-        self.manifoldPolicy = nn.Linear(2, self.action_space.n)
-        self.manifoldValue = nn.Linear(2, 1)
+        self.policy_branch = nn.Linear(self.numPlaceCells, self.action_space.n)
+        self.value_branch = nn.Linear(self.numPlaceCells, 1)
+
+    def _getPlaceActivationFromMemory(self, memory: torch.Tensor) -> torch.Tensor:
+        placeActivation = self.place_projector(memory)
+        return calculatePlace(
+            self.placeCells,
+            torch.matmul(placeActivation, self.placeCells),
+            self.fieldSize,
+        )
 
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
         prevPlaces = self.placeEncoderForMemory(
-            calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
+            calculatePlace(self.placeCells, lastAgentLocation[:, 0, :], self.fieldSize)
         )
         initialMemory = self._getInitialMemory(
             prevPlaces, batch[Columns.STATE_IN]["hiddenObs"]
@@ -49,13 +59,13 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
+        placeActivation = self._getPlaceActivationFromMemory(memory)
         movements = None
-        policy = self.policy_branch(memory)
-        value = self.value_branch(memory)
+        policy = self.policy_branch(placeActivation)
+        value = self.value_branch(placeActivation)
         predictedPlaces = None
         actualPlaces = None
         finalGridState = None
-        manifold = None
 
         def getOutputs():
             return (
@@ -66,7 +76,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 finalGridState,
                 memory.detach(),
                 movements,
-                manifold,
             )
 
         selfLocalize = self.model_config.get("self_localize", False)
@@ -75,30 +84,18 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if self.model_config.get("pretrain", False):
             return getOutputs()
 
-        initialManifoldCoordinate = self.manifoldProjector(initialMemory)
-        initialPlaceMask = torch.sum(batch[Columns.STATE_IN]["hiddenObs"], 1) == 0
-        initialManifoldCoordinate = torch.where(
-            initialPlaceMask[:, None],
-            lastAgentLocation[:, 0, :],
-            initialManifoldCoordinate,
+        initialPlaceActivation = self._getPlaceActivationFromMemory(initialMemory)
+        manifoldCoordinates = torch.matmul(
+            torch.concat([initialPlaceActivation.unsqueeze(1), placeActivation], dim=1),
+            self.placeCells,
         )
-        manifoldCoordinates = self.manifoldProjector(memory)
-        movements = torch.diff(
-            torch.concat(
-                [initialManifoldCoordinate.unsqueeze(1), manifoldCoordinates],
-                dim=1,
-            ),
-            dim=1,
-        )
-        policy = self.manifoldPolicy(manifoldCoordinates)
-        value = self.manifoldValue(manifoldCoordinates)
-        manifold = manifoldCoordinates
+        movements = torch.diff(manifoldCoordinates, dim=1)
 
         if learnManifold:
             return getOutputs()
 
         integratedCode, predictedPlaces, finalGridState = getIntegration(
-            initialManifoldCoordinate, movements
+            initialPlaceActivation, movements
         )
 
         if selfLocalize:
@@ -123,7 +120,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             finalIntegrationState,
             memory,
             movements,
-            manifold,
         ) = self._getPolicyAndValue(batch)
         output = {
             Columns.ACTION_DIST_INPUTS: policy,
@@ -145,16 +141,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if movements is not None:
             output["movements"] = movements
 
-        if manifold is not None:
-            output["manifold"] = manifold
-            if "rewards" in batch:
-                rewards = batch["rewards"]
-                output["rewards"] = rewards
-
         return output
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            _, embeddings, _, _, _, _, _, _ = self._getPolicyAndValue(batch)
+            _, embeddings, _, _, _, _, _ = self._getPolicyAndValue(batch)
         return embeddings.squeeze(-1)

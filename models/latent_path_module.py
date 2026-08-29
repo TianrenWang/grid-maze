@@ -1,3 +1,5 @@
+import math
+
 import torch
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
@@ -27,11 +29,29 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
+        self.directionDecoder = nn.Sequential(
+            nn.Linear(self.linearHiddenSize + self.action_space.n + 1, 1), nn.Tanh()
+        )
+        self.speed = 1 / 30
         self.place_projector = nn.Sequential(
             nn.Linear(self.linearHiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
         )
         self.policy_branch = nn.Linear(self.numPlaceCells, self.action_space.n)
         self.value_branch = nn.Linear(self.numPlaceCells, 1)
+
+    @override(TorchRLModule)
+    def get_initial_state(self):
+        return {
+            "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
+            "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "hiddenGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "manifoldCoordinate": torch.ones((2,), dtype=torch.float32),
+        }
+
+    def _getDisplacement(self, latent: torch.Tensor) -> torch.Tensor:
+        angle = self.directionDecoder(latent) * math.pi
+        theta = math.pi * angle
+        return torch.cat([torch.cos(theta), torch.sin(theta)], dim=-1) * self.speed
 
     def _getPlaceActivationFromMemory(self, memory: torch.Tensor) -> torch.Tensor:
         placeActivation = self.place_projector(memory)
@@ -42,7 +62,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         )
 
     def _getPolicyAndValue(self, batch):
-        vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         prevPlaces = self.placeEncoderForMemory(
             calculatePlace(self.placeCells, lastAgentLocation[:, 0, :], self.fieldSize)
         )
@@ -59,7 +79,22 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
-        placeActivation = self._getPlaceActivationFromMemory(memory)
+        displacement = self._getDisplacement(torch.concat([memory, action], dim=-1))
+        previousMemory = batch[Columns.STATE_IN]["hiddenObs"]
+        initialCoordinateMask = torch.sum(previousMemory, 1) == 0
+        startingPlace = torch.where(
+            initialCoordinateMask[:, None],
+            self.place_projector(prevPlaces) @ self.placeCells,
+            batch[Columns.STATE_IN]["manifoldCoordinate"],
+        )
+        manifoldCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
+            displacement, dim=1
+        )
+        placeActivation = calculatePlace(
+            self.placeCells,
+            manifoldCoordinates,
+            self.fieldSize,
+        )
         movements = None
         policy = self.policy_branch(placeActivation)
         value = self.value_branch(placeActivation)
@@ -75,7 +110,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 actualPlaces,
                 finalGridState,
                 memory.detach(),
-                movements,
+                manifoldCoordinates,
             )
 
         selfLocalize = self.model_config.get("self_localize", False)
@@ -119,11 +154,12 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             actualPlaces,
             finalIntegrationState,
             memory,
-            movements,
+            manifoldCoordinates,
         ) = self._getPolicyAndValue(batch)
         output = {
             Columns.ACTION_DIST_INPUTS: policy,
             Columns.STATE_OUT: {
+                "manifoldCoordinate": manifoldCoordinates[:, -1, :],
                 "hiddenObs": memory[:, -1, :],
                 "candidateGrid": finalIntegrationState[1].squeeze(0)
                 if finalIntegrationState
@@ -138,8 +174,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             output["placeLogit"] = predictedPlaces
             output["placeTarget"] = actualPlaces
 
-        if movements is not None:
-            output["movements"] = movements
+        # if movements is not None:
+        #     output["movements"] = movements
 
         return output
 

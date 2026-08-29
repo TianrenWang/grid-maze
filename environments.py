@@ -76,14 +76,15 @@ class MazeEnv(gym.Env):
                     allLocations.append((i, j))
             np.random.shuffle(allLocations)
             agentLocation = np.array(allLocations.pop())
-            goalDiff = np.abs(agentLocation - self._goalLocation)
-            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6 and self._eval
+
+            def withinRange(start: int = 6, end: int = self._actualMazeSize // 2):
+                goalDiff = np.abs(agentLocation - self._goalLocation)
+                return end > goalDiff[0] > start and end > goalDiff[1] > start
+
             while len(allLocations) and (
-                np.array_equal(agentLocation, self._goalLocation) or isCloseToGoal
+                np.array_equal(agentLocation, self._goalLocation) or not withinRange()
             ):
                 agentLocation = np.array(allLocations.pop())
-                goalDiff = np.abs(agentLocation - self._goalLocation)
-                isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             self._agentLocation = agentLocation
             agentChannel[agentLocation[0], agentLocation[1], 0] = 1
         else:

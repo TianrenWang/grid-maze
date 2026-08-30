@@ -84,9 +84,20 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         initialCoordinateMask = torch.sum(previousMemory, 1) == 0
         startingPlace = torch.where(
             initialCoordinateMask[:, None],
-            self.place_projector(prevPlaces) @ self.placeCells,
+            lastAgentLocation[:, 0, :],
             batch[Columns.STATE_IN]["manifoldCoordinate"],
         )
+        firstDisplacement = displacement[:, 0, :]
+        startingDisplacement = torch.where(
+            initialCoordinateMask[:, None],
+            torch.zeros(
+                firstDisplacement.shape,
+                dtype=torch.float32,
+                device=firstDisplacement.device,
+            ),
+            firstDisplacement,
+        )
+        displacement[:, 0, :] = startingDisplacement
         manifoldCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
             displacement, dim=1
         )

@@ -58,12 +58,39 @@ def generateMazeWithOfflimit(size: int):
 
 
 def getMazeDebugString(maze):
+    # Find the bounding box of all non-empty cells
+    non_empty = [
+        (r, c)
+        for r, row in enumerate(maze)
+        for c, cell in enumerate(row)
+        if str(cell) != " "
+    ]
+
+    if not non_empty:
+        return ""
+
+    min_row = min(r for r, c in non_empty)
+    max_row = max(r for r, c in non_empty)
+    min_col = min(c for r, c in non_empty)
+    max_col = max(c for r, c in non_empty)
+
+    # Keep 4 squares of surrounding empty space
+    min_row = max(0, min_row - 4)
+    max_row = min(len(maze) - 1, max_row + 4)
+    min_col = max(0, min_col - 4)
+    max_col = min(len(maze[0]) - 1, max_col + 4)
+
     mazeString = []
-    mazeString.append("".join("." for i in range(len(maze) + 2)))
-    for row in maze:
-        rowContent = "".join(str(cell) for cell in row)
+
+    width = max_col - min_col + 1
+    mazeString.append("." * (width + 2))
+
+    for row in maze[min_row : max_row + 1]:
+        rowContent = "".join(str(cell) for cell in row[min_col : max_col + 1])
         mazeString.append("." + rowContent + ".")
-    mazeString.append("".join("." for i in range(len(maze) + 2)))
+
+    mazeString.append("." * (width + 2))
+
     return "\n".join(mazeString)
 
 

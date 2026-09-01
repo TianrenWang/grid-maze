@@ -74,6 +74,20 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 fwd_out=fwd_out,
             )
 
+            if "trueCoordinates" in fwd_out and "manifoldCoordinates" in fwd_out:
+                trueCoordinates = fwd_out["trueCoordinates"][lossMask]
+                manifoldCoordinates = fwd_out["manifoldCoordinates"][lossMask]
+                relativeDifferences = torch.linalg.norm(
+                    trueCoordinates - manifoldCoordinates, dim=-1
+                )
+                coherenceLoss = relativeDifferences.mean()
+                loss += coherenceLoss
+                self.metrics.log_value(
+                    key=(module_id, "coherence_loss"),
+                    value=coherenceLoss.cpu().detach().numpy(),
+                    window=100,
+                )
+
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]
                 distances = torch.linalg.norm(movements, dim=1)

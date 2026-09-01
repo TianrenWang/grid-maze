@@ -12,6 +12,8 @@ torch.set_printoptions(precision=2)
 from .agent_models import PathIntegrationWithVisionModule
 from .utils import calculatePlace
 
+MANIFOLD_DIM = 2
+
 
 class ManifoldProjector(nn.Module):
     def __init__(self, inputSize: int, latentSize: int):
@@ -28,7 +30,9 @@ class ManifoldProjector(nn.Module):
 class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
-        self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
+        self.pathIntegrator = nn.LSTM(
+            MANIFOLD_DIM, self.integratorSize, batch_first=True
+        )
         self.directionDecoder = nn.Sequential(
             nn.Linear(self.linearHiddenSize + self.action_space.n + 1, 1), nn.Tanh()
         )
@@ -36,8 +40,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.place_projector = nn.Sequential(
             nn.Linear(self.linearHiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
         )
-        self.policy_branch = nn.Linear(self.numPlaceCells, self.action_space.n)
-        self.value_branch = nn.Linear(self.numPlaceCells, 1)
 
     @override(TorchRLModule)
     def get_initial_state(self):
@@ -84,7 +86,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         initialCoordinateMask = torch.sum(previousMemory, 1) == 0
         startingPlace = torch.where(
             initialCoordinateMask[:, None],
-            lastAgentLocation[:, 0, :],
+            self.place_projector(initialMemory) @ self.placeCells,
             batch[Columns.STATE_IN]["manifoldCoordinate"],
         )
         firstDisplacement = displacement[:, 0, :]
@@ -101,14 +103,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         manifoldCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
             displacement, dim=1
         )
-        placeActivation = calculatePlace(
-            self.placeCells,
-            manifoldCoordinates,
-            self.fieldSize,
-        )
         movements = None
-        policy = self.policy_branch(placeActivation)
-        value = self.value_branch(placeActivation)
+        policy = self.policy_branch(memory)
+        value = self.value_branch(memory)
         predictedPlaces = None
         actualPlaces = None
         finalGridState = None
@@ -120,7 +117,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 predictedPlaces,
                 actualPlaces,
                 finalGridState,
-                memory.detach(),
+                memory,
                 manifoldCoordinates,
             )
 
@@ -180,6 +177,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 else batch[Columns.STATE_IN]["hiddenGrid"],
             },
             Columns.EMBEDDINGS: value,
+            "trueCoordinates": self._getObsFromBatch(batch)[2],
+            "manifoldCoordinates": manifoldCoordinates,
         }
         if predictedPlaces is not None:
             output["placeLogit"] = predictedPlaces

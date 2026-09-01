@@ -77,7 +77,7 @@ class MazeEnv(gym.Env):
             np.random.shuffle(allLocations)
             agentLocation = np.array(allLocations.pop())
 
-            def withinRange(start: int = 6, end: int = self._actualMazeSize // 2):
+            def withinRange(start: int = 6, end: int = self._mazeSize // 2):
                 goalDiff = np.abs(agentLocation - self._goalLocation)
                 return end >= goalDiff[0] >= start and end >= goalDiff[1] >= start
 

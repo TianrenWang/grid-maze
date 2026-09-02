@@ -79,7 +79,11 @@ class MazeEnv(gym.Env):
 
             def withinRange(start: int = 6, end: int = self._mazeSize // 2):
                 goalDiff = np.abs(agentLocation - self._goalLocation)
-                return end >= goalDiff[0] >= start and end >= goalDiff[1] >= start
+                return (
+                    end >= goalDiff[0] >= start
+                    and end >= goalDiff[1] >= start
+                    or not self._eval
+                )
 
             while len(allLocations) and (
                 np.array_equal(agentLocation, self._goalLocation) or not withinRange()

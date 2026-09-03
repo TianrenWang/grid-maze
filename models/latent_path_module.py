@@ -101,9 +101,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         jepaMemory, jepaLoss = self.jepa.forward_train(
             vision,
             initialMemory,
-            torch.nn.functional.one_hot(batch["actions"].to(torch.long)).to(
-                torch.int32
-            ),
+            torch.nn.functional.one_hot(
+                batch["actions"].to(torch.long), num_classes=4
+            ).to(torch.int32),
         )
         output.jepaMemory = jepaMemory
         output.jepaLoss = jepaLoss

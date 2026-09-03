@@ -106,5 +106,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     def apply_gradients(self, gradients_dict: dict[str, Any]) -> None:
         super().apply_gradients(gradients_dict)
         module = self.module[DEFAULT_MODULE_ID]
-        if type(module) is models.LatentPathModule:
+        if (
+            type(module) is models.LatentPathModule
+            and module.trainingPhase == "learnManifold"
+        ):
             module.jepa.EMAEncoder.update()

@@ -36,12 +36,26 @@ class ControlOutputs:
     jepaLoss: torch.Tensor | None = None
 
 
+SELF_LOCALIZE = "self_localize"
+LEARN_MANIFOLD = "learnManifold"
+PRETRAIN = "pretrain"
+
+
 class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
+
+        if self.model_config.get("pretrain", False):
+            self.trainingPhase = PRETRAIN
+        elif self.model_config.get("learnManifold", False):
+            self.trainingPhase = LEARN_MANIFOLD
+        elif self.model_config.get("self_localize", False):
+            self.trainingPhase = SELF_LOCALIZE
+        else:
+            self.trainingPhase = None
 
     @override(TorchRLModule)
     def get_initial_state(self):
@@ -75,10 +89,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         output = ControlOutputs(policy=policy, value=value, memory=memory)
 
-        # selfLocalize = self.model_config.get("self_localize", False)
-        learnManifold = self.model_config.get("learnManifold", False)
-
-        if self.model_config.get("pretrain", False) or "actions" not in batch:
+        if self.trainingPhase == PRETRAIN or "actions" not in batch:
             return output
 
         prevPlaces = self.placeEncoderForJEPA(
@@ -97,7 +108,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         output.jepaMemory = jepaMemory
         output.jepaLoss = jepaLoss
 
-        if learnManifold:
+        if self.trainingPhase == LEARN_MANIFOLD:
             return output
 
         return output

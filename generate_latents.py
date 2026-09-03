@@ -23,7 +23,7 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
         {
             "maze": None,
             "start": None,
-            "maxSteps": 40,
+            "maxSteps": 30,
             "mazeSize": mazeSize,
         }
     )
@@ -33,8 +33,9 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     encounteredStates = set()
     latentStates = []
     stateLabels = []
+    episodeRenders = {}
 
-    while episodes < 200:
+    while episodes < 300:
         gameId = str(uuid.uuid4())[:8]
         previousState = module.get_initial_state()
         obs, _ = env.reset()
@@ -48,9 +49,21 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 },
             }
             rl_module_out = module.forward_exploration(batched_obs)
-            latent = rl_module_out["latent"].detach().cpu().numpy().flatten().tolist()
-            projection = (
-                rl_module_out["projection"].detach().cpu().numpy().flatten().tolist()
+            latent = (
+                rl_module_out[Columns.STATE_OUT]["hiddenObs"]
+                .detach()
+                .cpu()
+                .numpy()
+                .flatten()
+                .tolist()
+            )
+            actionDistribution = (
+                torch.softmax(
+                    rl_module_out[Columns.ACTION_DIST_INPUTS].flatten(), dim=0
+                )
+                .detach()
+                .cpu()
+                .numpy()
             )
 
             if str(latent) not in encounteredStates:
@@ -63,22 +76,12 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                         env._episode_len,
                         f"{gameId}-{(3 - numberOfDigitsInEpisodeLen) * '0'}{env._episode_len}",
                         np.round(env._agentLocation, decimals=2).tolist(),
-                        np.round(projection, decimals=2).tolist(),
-                        np.round(
-                            (env._agentLocation - env._goalLocation).sum(), decimals=2
-                        )
-                        < 1.01,
+                        np.abs(env._agentLocation - env._goalLocation).sum() < 1.01,
+                        np.round(np.max(actionDistribution), 2),
                     ]
                 )
-            action = np.random.choice(
-                4,
-                p=torch.softmax(
-                    rl_module_out[Columns.ACTION_DIST_INPUTS].flatten(), dim=0
-                )
-                .detach()
-                .cpu()
-                .numpy(),
-            )
+
+            action = np.random.choice(4, p=actionDistribution)
             obs, _, done, truncated, _ = env.step(action)
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
@@ -100,10 +103,9 @@ def saveGameData(
             "step",
             "positionId",
             "location",
-            "projection",
             "done",
+            "confidence",
         ]
-
     folder_path = "data/" + dataName
     if os.path.exists(folder_path):
         shutil.rmtree(folder_path)

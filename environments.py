@@ -77,7 +77,7 @@ class MazeEnv(gym.Env):
             np.random.shuffle(allLocations)
             agentLocation = np.array(allLocations.pop())
             goalDiff = np.abs(agentLocation - self._goalLocation)
-            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
+            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6 and self._eval
             while len(allLocations) and (
                 np.array_equal(agentLocation, self._goalLocation) or isCloseToGoal
             ):
@@ -116,6 +116,7 @@ class MazeEnv(gym.Env):
         ]
         if not self._maxSteps:
             self._maxSteps = self.getShortestDistance()
+        self._actionTaken = 4
         return self._getObs(), self._get_info()
 
     def isValidLocation(self, location: np.ndarray):

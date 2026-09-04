@@ -10,9 +10,12 @@ class Encoder(nn.Module):
         super().__init__()
         self.visionEncoder = SimpleConv(latentSize)
         visionEncoderOutSize = ((inputSize + 1) // 2 + 1) // 2
-        self.encoder = nn.Linear(
-            visionEncoderOutSize**2 * latentSize * 2,
-            latentSize,
+        self.encoder = nn.Sequential(
+            nn.Linear(
+                visionEncoderOutSize**2 * latentSize * 2,
+                latentSize,
+            ),
+            nn.LayerNorm(latentSize),
         )
 
     def forward(self, vision: torch.Tensor) -> torch.Tensor:

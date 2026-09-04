@@ -1,8 +1,13 @@
+from typing import Any
+
 import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
+from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.typing import ModuleID
+
+import models
 
 
 class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
@@ -65,20 +70,14 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
-            if "actualLatents" in fwd_out and "reconstructedLatents" in fwd_out:
-                latents: torch.Tensor = fwd_out["actualLatents"][lossMask]
-                reconstructedLatents: torch.Tensor = fwd_out["reconstructedLatents"][
-                    lossMask
-                ]
-                reconstructionLoss = torch.nn.functional.mse_loss(
-                    reconstructedLatents, latents
-                )
+            if "jepaLoss" in fwd_out:
+                jepaLoss: torch.Tensor = fwd_out["jepaLoss"][lossMask].mean()
                 self.metrics.log_value(
-                    key=(module_id, "reconstruction_loss"),
-                    value=reconstructionLoss.cpu().detach().numpy(),
+                    key=(module_id, "jepa_loss"),
+                    value=jepaLoss.cpu().detach().numpy(),
                     window=100,
                 )
-                loss += reconstructionLoss
+                loss += jepaLoss
 
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]
@@ -102,3 +101,13 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 batch=batch,
                 fwd_out=fwd_out,
             )
+
+    @override(PPOTorchLearner)
+    def apply_gradients(self, gradients_dict: dict[str, Any]) -> None:
+        super().apply_gradients(gradients_dict)
+        module = self.module[DEFAULT_MODULE_ID]
+        if (
+            type(module) is models.LatentPathModule
+            and module.trainingPhase == "learnManifold"
+        ):
+            module.jepa.EMAEncoder.update()

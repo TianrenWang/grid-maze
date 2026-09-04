@@ -22,7 +22,6 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     env = PlaceMazeEnv(
         {
             "maze": None,
-            "goal": (mazeSize // 2, mazeSize // 2),
             "start": None,
             "maxSteps": 30,
             "mazeSize": mazeSize,
@@ -87,14 +86,9 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
 
-        episodeRenders[gameId] = env.render()
-
         episodes += 1
 
     saveGameData(latentStates, stateLabels, expName)
-    while True:
-        gameId = input("Enter game ID: ")
-        print(episodeRenders[gameId])
 
 
 def saveGameData(

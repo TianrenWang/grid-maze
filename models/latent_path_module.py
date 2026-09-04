@@ -1,5 +1,6 @@
+from dataclasses import dataclass
+
 import torch
-from ema_pytorch import EMA
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
@@ -7,6 +8,7 @@ from ray.rllib.utils.annotations import override
 from torch import nn
 
 from .agent_models import PathIntegrationWithVisionModule
+from .jepa import JEPA
 from .utils import calculatePlace
 
 
@@ -22,14 +24,47 @@ class ManifoldProjector(nn.Module):
         return projection, reconstructed
 
 
+@dataclass
+class ControlOutputs:
+    policy: torch.Tensor
+    value: torch.Tensor
+    memory: torch.Tensor
+    jepaMemory: torch.Tensor | None = None
+    predictedPlaces: torch.Tensor | None = None
+    actualPlaces: torch.Tensor | None = None
+    finalIntegrationState: torch.Tensor | None = None
+    jepaLoss: torch.Tensor | None = None
+
+
+SELF_LOCALIZE = "self_localize"
+LEARN_MANIFOLD = "learnManifold"
+PRETRAIN = "pretrain"
+
+
 class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.manifoldProjector = ManifoldProjector(self.linearHiddenSize, 2)
-        self.EMAProjector = EMA(
-            self.manifoldProjector, beta=0.9999, update_after_step=100, update_every=10
-        )
+        self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
+        self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
+
+        if self.model_config.get("pretrain", False):
+            self.trainingPhase = PRETRAIN
+        elif self.model_config.get("learnManifold", False):
+            self.trainingPhase = LEARN_MANIFOLD
+        elif self.model_config.get("self_localize", False):
+            self.trainingPhase = SELF_LOCALIZE
+        else:
+            self.trainingPhase = None
+
+    @override(TorchRLModule)
+    def get_initial_state(self):
+        return {
+            "hiddenObs": torch.zeros((self.linearHiddenSize,), dtype=torch.float32),
+            "candidateGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "hiddenGrid": torch.zeros((self.integratorSize,), dtype=torch.float32),
+            "jepaMemory": torch.zeros((self.hiddenSize,), dtype=torch.float32),
+        }
 
     def _getPolicyAndValue(self, batch):
         vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
@@ -49,100 +84,72 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
 
         memory = self._processVisualMemory(vision, initialMemory)
-
         policy = self.policy_branch(memory)
         value = self.value_branch(memory)
-        predictedPlaces = None
-        actualPlaces = None
-        finalGridState = None
-        reconstructedLatent = None
-        movements = None
 
-        def getOutputs():
-            return (
-                policy,
-                value,
-                predictedPlaces,
-                actualPlaces,
-                finalGridState,
-                memory.detach(),
-                reconstructedLatent,
-                movements,
-            )
+        output = ControlOutputs(policy=policy, value=value, memory=memory)
 
-        selfLocalize = self.model_config.get("self_localize", False)
-        learnManifold = self.model_config.get("learnManifold", False)
+        if self.trainingPhase == PRETRAIN or "actions" not in batch:
+            return output
 
-        if self.model_config.get("pretrain", False):
-            return getOutputs()
-
-        memory = memory.detach()
-        initialMemory = initialMemory.detach()
-        sequenceProjections, reconstructedLatent = self.manifoldProjector(
-            torch.concat([initialMemory.unsqueeze(1), memory], dim=1)
+        prevPlaces = self.placeEncoderForJEPA(
+            calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
         )
-        reconstructedLatent = reconstructedLatent[:, 1:, :]
-
-        if learnManifold:
-            return getOutputs()
-
-        movements = sequenceProjections[:, 1:, :] - sequenceProjections[:, :-1, :]
-        integratedCode, predictedPlaces, finalGridState = getIntegration(
-            sequenceProjections[:, 0, :], movements
+        initialMemory = self._getInitialMemory(
+            prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
         )
+        jepaMemory, jepaLoss = self.jepa.forward_train(
+            vision,
+            initialMemory,
+            torch.nn.functional.one_hot(
+                batch["actions"].to(torch.long), num_classes=4
+            ).to(torch.int32),
+        )
+        output.jepaMemory = jepaMemory
+        output.jepaLoss = jepaLoss
 
-        if selfLocalize:
-            actualPlaces = calculatePlace(
-                self.placeCells, self.EMAProjector(memory)[0]
-            ).detach()
-            return getOutputs()
+        if self.trainingPhase == LEARN_MANIFOLD:
+            return output
 
-        integration = self.gridCompressor(integratedCode)
-        policy = self.piPolicyPredictor(integration)
-        value = self.piValuePredictor(integration)
-
-        return getOutputs()
+        return output
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        (
-            policy,
-            value,
-            predictedPlaces,
-            actualPlaces,
-            finalIntegrationState,
-            memory,
-            reconstructedLatent,
-            movements,
-        ) = self._getPolicyAndValue(batch)
-        output = {
-            Columns.ACTION_DIST_INPUTS: policy,
-            Columns.STATE_OUT: {
-                "hiddenObs": memory[:, -1, :],
-                "candidateGrid": finalIntegrationState[1].squeeze(0)
-                if finalIntegrationState
-                else batch[Columns.STATE_IN]["candidateGrid"],
-                "hiddenGrid": finalIntegrationState[0].squeeze(0)
-                if finalIntegrationState
-                else batch[Columns.STATE_IN]["hiddenGrid"],
-            },
-            Columns.EMBEDDINGS: value,
+        controlOutputs = self._getPolicyAndValue(batch)
+        finalOutput = {
+            Columns.ACTION_DIST_INPUTS: controlOutputs.policy,
+            Columns.STATE_OUT: {"hiddenObs": controlOutputs.memory[:, -1, :]},
+            Columns.EMBEDDINGS: controlOutputs.value,
         }
-        if predictedPlaces is not None:
-            output["placeLogit"] = predictedPlaces
-            output["placeTarget"] = actualPlaces
 
-        if reconstructedLatent is not None:
-            output["reconstructedLatents"] = reconstructedLatent
-            output["actualLatents"] = memory
+        stateOut = finalOutput[Columns.STATE_OUT]
+        stateIn = batch[Columns.STATE_IN]
 
-        if movements is not None:
-            output["movements"] = movements
+        if controlOutputs.finalIntegrationState is None:
+            stateOut["candidateGrid"] = stateIn["candidateGrid"]
+            stateOut["hiddenGrid"] = stateIn["hiddenGrid"]
+        else:
+            stateOut["candidateGrid"] = controlOutputs.finalIntegrationState[1].squeeze(
+                0
+            )
+            stateOut["hiddenGrid"] = controlOutputs.finalIntegrationState[0].squeeze(0)
 
-        return output
+        if controlOutputs.jepaMemory is None:
+            stateOut["jepaMemory"] = stateIn["jepaMemory"]
+        else:
+            stateOut["jepaMemory"] = controlOutputs.jepaMemory[:, -1, :]
+
+        if type(controlOutputs.predictedPlaces) is torch.Tensor:
+            finalOutput["placeLogit"] = controlOutputs.predictedPlaces
+            finalOutput["placeTarget"] = controlOutputs.actualPlaces
+
+        if type(controlOutputs.jepaLoss) is torch.Tensor:
+            finalOutput["jepaLoss"] = controlOutputs.jepaLoss
+
+        return finalOutput
 
     @override(ValueFunctionAPI)
     def compute_values(self, batch, embeddings=None):
         if embeddings is None:
-            _, embeddings, _, _, _, _, _, _ = self._getPolicyAndValue(batch)
+            embeddings = self._getPolicyAndValue(batch).value
         return embeddings.squeeze(-1)

@@ -34,7 +34,7 @@ class JEPA(nn.Module):
             nn.Linear(latentSize, latentSize),
         )
         self.EMAEncoder = EMA(
-            self.encoder, beta=0.999, update_after_step=100, update_every=10
+            self.encoder, beta=0.9999, update_after_step=100, update_every=10
         )
 
     def forward(self, vision: torch.Tensor, initialMemory: torch.Tensor):

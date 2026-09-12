@@ -36,12 +36,47 @@ def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
-def generateMaze(size: int, p_obstacle: float = 0.2):
+def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = True):
     maze = [[1 for _ in range(size)] for _ in range(size)]
     for i in range(size):
         for j in range(size):
             if random.random() < p_obstacle:
                 maze[i][j] = 0
+
+    if landmarks:
+        halfPoint = size // 2
+        innerRoomStartIndex = halfPoint - 15
+
+        def createOuterLandmark(row: int, col: int, landmarkSize: int, omitId: int):
+            for i in range(
+                innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
+            ):
+                for j in range(
+                    innerRoomStartIndex + col, innerRoomStartIndex + col + landmarkSize
+                ):
+                    maze[i][j] = 0
+
+            omitRow = omitId // landmarkSize
+            omitCol = omitId % landmarkSize
+
+            maze[innerRoomStartIndex + row + omitRow][
+                innerRoomStartIndex + col + omitCol
+            ] = 1
+
+        createOuterLandmark(3, 3, 3, 0)
+        createOuterLandmark(3, 14, 3, 1)
+        createOuterLandmark(3, 25, 3, 2)
+        createOuterLandmark(14, 3, 3, 3)
+        createOuterLandmark(14, 24, 3, 5)
+        createOuterLandmark(25, 3, 3, 6)
+        createOuterLandmark(25, 14, 3, 7)
+        createOuterLandmark(25, 25, 3, 8)
+
+        createOuterLandmark(9, 9, 2, 0)
+        createOuterLandmark(9, 20, 2, 1)
+        createOuterLandmark(20, 9, 2, 2)
+        createOuterLandmark(20, 20, 2, 3)
+
     return maze
 
 

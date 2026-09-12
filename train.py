@@ -14,12 +14,12 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 import models
-from environments import MazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from environments import MazeEnv, PlaceMazeEnv, SmoothExplorationEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 from maze import generateMaze, getMazeDebugString
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=30)
+parser.add_argument("--mazeSize", type=int, default=31)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
 parser.add_argument("--hiddenSize", type=int, default=32)
@@ -63,9 +63,7 @@ if __name__ == "__main__":
     maze = None
     evalMaxSteps = 200
 
-    if args.selfLocalize:
-        maze = generateMaze(mazeSize, 0)
-    elif not args.randomMaze:
+    if not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)
         mazes = os.listdir(mazesPath)
@@ -94,7 +92,7 @@ if __name__ == "__main__":
         module = models.SimpleMazeModule
 
     if args.selfLocalize:
-        env = SelfLocalizeEnv
+        env = SmoothExplorationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:

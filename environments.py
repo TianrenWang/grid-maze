@@ -11,10 +11,10 @@ class MazeEnv(gym.Env):
     def __init__(self, config=None):
         self._episode_len = 0
         self._mazeArray = config.get("maze", None)
-        self._mazeSize = config.get("mazeSize", None)
-        self._actualMazeSize = self._mazeSize * 2
+        self._mazeSize = 31
+        self._actualMazeSize = 200
         self._randomMaze = not self._mazeArray
-        self._goalLocation = [self._mazeSize, self._mazeSize]
+        self._goalLocation = [self._actualMazeSize // 2, self._actualMazeSize // 2]
         self._fixedGoal = bool(self._goalLocation)
         self._startLocation = config.get("start", None)
         self._maxSteps = config["maxSteps"]
@@ -69,7 +69,7 @@ class MazeEnv(gym.Env):
         agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
             allLocations = []
-            shiftAmount = (self._actualMazeSize - self._mazeSize) // 2
+            shiftAmount = self._actualMazeSize // 2 - self._mazeSize // 2
             _range = range(shiftAmount, shiftAmount + self._mazeSize)
             for i in _range:
                 for j in _range:
@@ -211,7 +211,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
+            -2, 2, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
         )
         self._forcedGoal = None
         self._perturb = config.get("perturb", False)
@@ -270,27 +270,21 @@ class PlaceMazeEnv(FoggedMazeEnv):
         vision = super()._getObs()
         actionOneHot = np.zeros(5)
         actionOneHot[self._actionTaken] = 1
+        shiftAmount = self._actualMazeSize // 2 - self._mazeSize // 2
         return np.concatenate(
             [
                 vision.flatten(),
-                (self._lastLocation - self._mazeSize // 2) / self._mazeSize,
-                (self._agentLocation - self._mazeSize // 2) / self._mazeSize,
+                (self._lastLocation - shiftAmount) / self._mazeSize,
+                (self._agentLocation - shiftAmount) / self._mazeSize,
                 actionOneHot,
             ],
             dtype=np.float32,
         )
 
 
-class SelfLocalizeEnv(PlaceMazeEnv):
+class SmoothExplorationEnv(PlaceMazeEnv):
     def __init__(self, config=None):
         super().__init__(config)
-        visualObsSize = self._visualRange * 2 + 1
-        self._lastLocation = self._agentLocation
-        self.observation_space = gym.spaces.Box(
-            0, 1, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
-        )
-        self._actualMazeSize = self._mazeSize
-        self._goalLocation = [self._mazeSize // 2, self._mazeSize // 2]
         self.previousActions = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):

@@ -47,9 +47,6 @@ args = parser.parse_args()
 if args.pretrain or args.learnManifold:
     args.latentPath = True
 
-if args.learnManifold:
-    args.selfLocalize = True
-
 
 def usesGrid():
     return args.grid or args.selfLocalize or args.latentPath or args.pureCode

@@ -20,10 +20,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: dict[str, dict],
         fwd_out: dict[str, torch.Tensor],
     ):
+        lossMask = batch["loss_mask"]
         if config.learner_config_dict.get("self_localize"):
             loss = 0
-            lossMask = batch["loss_mask"]
-
             if "placeLogit" in fwd_out and "placeTarget" in fwd_out:
                 parameters = self.module[module_id].named_parameters()
                 placeCells = None
@@ -70,15 +69,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     window=100,
                 )
 
-            if "jepaLoss" in fwd_out:
-                jepaLoss: torch.Tensor = fwd_out["jepaLoss"][lossMask].mean()
-                self.metrics.log_value(
-                    key=(module_id, "jepa_loss"),
-                    value=jepaLoss.cpu().detach().numpy(),
-                    window=100,
-                )
-                loss += jepaLoss
-
             if "movements" in fwd_out:
                 movements: torch.Tensor = fwd_out["movements"][lossMask]
                 distances = torch.linalg.norm(movements, dim=1)
@@ -94,6 +84,14 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 )
 
             return loss
+        elif "jepaLoss" in fwd_out:
+            jepaLoss: torch.Tensor = fwd_out["jepaLoss"][lossMask].mean()
+            self.metrics.log_value(
+                key=(module_id, "jepa_loss"),
+                value=jepaLoss.cpu().detach().numpy(),
+                window=100,
+            )
+            return jepaLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

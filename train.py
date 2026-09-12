@@ -64,7 +64,7 @@ if __name__ == "__main__":
     evalMaxSteps = 200
 
     if args.selfLocalize:
-        maze = generateMaze(mazeSize, 0)
+        maze = generateMaze(mazeSize)
     elif not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)

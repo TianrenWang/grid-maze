@@ -297,10 +297,16 @@ class SmoothExplorationEnv(PlaceMazeEnv):
 
         candidates = []
 
+        shiftAmount = (self._actualMazeSize - self._mazeSize) // 2
+
         for a in availableActions:
             direction = self._action_to_direction[a]
             newLoc = self._agentLocation + direction
-            if self.isValidLocation(newLoc):
+            if (
+                self.isValidLocation(newLoc)
+                and shiftAmount <= newLoc[0] <= shiftAmount + self._mazeSize
+                and shiftAmount <= newLoc[1] <= shiftAmount + self._mazeSize
+            ):
                 visit_count = self._visitCounts[newLoc[0]][newLoc[1]]
                 candidates.append((visit_count, a))
 
@@ -327,18 +333,3 @@ class SmoothExplorationEnv(PlaceMazeEnv):
         if len(self.previousActions) > 3:
             self.previousActions.popleft()
         return super().step(best_action)
-
-    def _getObs(self):
-        obs = super()._getObs()
-        actionOneHot = np.zeros(5)
-        actionOneHot[self._actionTaken] = 1
-        visualObsSize = self._visualRange * 2 + 1
-        return np.concatenate(
-            [
-                obs[: visualObsSize**2 * 2],
-                self._lastLocation / self._mazeSize,
-                self._agentLocation / self._mazeSize,
-                actionOneHot,
-            ],
-            dtype=np.float32,
-        )

@@ -31,7 +31,7 @@ class MazeEnv(gym.Env):
         )
         self.observation_space = gym.spaces.Dict(
             {
-                "vision": gym.spaces.MultiBinary((self._mazeSize, self._mazeSize, 3)),
+                "vision": gym.spaces.MultiBinary((self._mazeSize, self._mazeSize, 1)),
             }
         )
         self.action_space = gym.spaces.Discrete(4)
@@ -62,11 +62,6 @@ class MazeEnv(gym.Env):
         if self._randomMaze:
             self._mazeArray = generateMaze(self._actualMazeSize)
 
-        mazeSize = len(self._mazeArray)
-
-        targetChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
-        targetChannel[self._goalLocation[0], self._goalLocation[1], 0] = 1
-        agentChannel = np.zeros([mazeSize, mazeSize, 1], dtype=np.int32)
         if not self._startLocation:
             allLocations = []
             shiftAmount = self._actualMazeSize // 2 - self._mazeSize // 2
@@ -85,9 +80,7 @@ class MazeEnv(gym.Env):
                 goalDiff = np.abs(agentLocation - self._goalLocation)
                 isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             self._agentLocation = agentLocation
-            agentChannel[agentLocation[0], agentLocation[1], 0] = 1
         else:
-            agentChannel[self._startLocation[0], self._startLocation[1], 0] = 1
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
 
         self._mazeTracker = []
@@ -106,8 +99,7 @@ class MazeEnv(gym.Env):
         self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
 
         self._pastLocation = self._agentLocation
-        mazeChannel = np.expand_dims(self._mazeArray, axis=2)
-        self._map = np.concat((mazeChannel, targetChannel, agentChannel), axis=2)
+        self._map = np.expand_dims(self._mazeArray, axis=2)
         self._episode_len = 0
         self.previousActions = deque()
         self._visitCounts = [
@@ -128,9 +120,7 @@ class MazeEnv(gym.Env):
         direction = self._action_to_direction[action]
         newLoc = self._agentLocation + direction
         if self.isValidLocation(newLoc):
-            self._map[self._agentLocation[0], self._agentLocation[1], 2] = 0
             self._agentLocation = newLoc
-            self._map[self._agentLocation[0], self._agentLocation[1], 2] = 1
             self._actionTaken = action
         else:
             self._actionTaken = 4
@@ -197,12 +187,11 @@ class FoggedMazeEnv(MazeEnv):
             mode="constant",
         )
         _paddedAgentLoc = self._agentLocation + np.array((4, 4))
-        vision = paddedMap[
+        return paddedMap[
             _paddedAgentLoc[0] - 4 : _paddedAgentLoc[0] + 5,
             _paddedAgentLoc[1] - 4 : _paddedAgentLoc[1] + 5,
             :,
         ]
-        return vision[:, :, :2]
 
 
 class PlaceMazeEnv(FoggedMazeEnv):
@@ -211,7 +200,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            -2, 2, (visualObsSize**2 * 2 + 4 + self.action_space.n + 1,)
+            -2, 2, (visualObsSize**2 + 4 + self.action_space.n + 1,)
         )
         self._forcedGoal = None
         self._perturb = config.get("perturb", False)

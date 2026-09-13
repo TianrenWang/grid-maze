@@ -47,7 +47,9 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
         halfPoint = size // 2
         innerRoomStartIndex = halfPoint - 15
 
-        def createOuterLandmark(row: int, col: int, landmarkSize: int, omitId: int):
+        def createLandmark(
+            row: int, col: int, landmarkSize: int, omitId: int, omitSize: int = 1
+        ):
             for i in range(
                 innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
             ):
@@ -59,23 +61,28 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
             omitRow = omitId // landmarkSize
             omitCol = omitId % landmarkSize
 
-            maze[innerRoomStartIndex + row + omitRow][
-                innerRoomStartIndex + col + omitCol
-            ] = 1
+            for i in range(omitSize):
+                for j in range(omitSize):
+                    maze[innerRoomStartIndex + row + omitRow + i][
+                        innerRoomStartIndex + col + omitCol + j
+                    ] = 1
 
-        createOuterLandmark(3, 3, 3, 0)
-        createOuterLandmark(3, 14, 3, 1)
-        createOuterLandmark(3, 25, 3, 2)
-        createOuterLandmark(14, 3, 3, 3)
-        createOuterLandmark(14, 24, 3, 5)
-        createOuterLandmark(25, 3, 3, 6)
-        createOuterLandmark(25, 14, 3, 7)
-        createOuterLandmark(25, 25, 3, 8)
+        createLandmark(3, 3, 3, 0)
+        createLandmark(3, 14, 3, 1)
+        createLandmark(3, 25, 3, 2)
+        createLandmark(14, 3, 3, 3)
+        createLandmark(14, 24, 3, 5)
+        createLandmark(25, 3, 3, 6)
+        createLandmark(25, 14, 3, 7)
+        createLandmark(25, 25, 3, 8)
 
-        createOuterLandmark(9, 9, 2, 0)
-        createOuterLandmark(9, 20, 2, 1)
-        createOuterLandmark(20, 9, 2, 2)
-        createOuterLandmark(20, 20, 2, 3)
+        createLandmark(8, 8, 3, 0, 2)
+        createLandmark(8, 20, 3, 1, 2)
+        createLandmark(20, 8, 3, 3, 2)
+        createLandmark(20, 20, 3, 4, 2)
+
+        createLandmark(13, 13, 5, 0)
+        maze[innerRoomStartIndex + 13][innerRoomStartIndex + 13] = 0
 
     return maze
 
@@ -103,5 +110,5 @@ def getMazeDebugString(maze):
 
 
 if __name__ == "__main__":
-    maze = generateMaze(20)
+    maze = generateMaze(100)
     print(getMazeDebugString(maze))

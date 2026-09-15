@@ -181,6 +181,10 @@ if __name__ == "__main__":
                         jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
                         print("JEPA Loss:", jepaLoss)
 
+                    if "coordinate_loss" in trainingOutputs:
+                        coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
+                        print("Coordinate Loss:", coordinateLoss)
+
                     if "movement_loss" in trainingOutputs:
                         movementLoss = np.round(trainingOutputs["movement_loss"], 2)
                         print("Movement Loss:", movementLoss)

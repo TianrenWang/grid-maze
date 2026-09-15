@@ -34,6 +34,7 @@ class ControlOutputs:
     actualPlaces: torch.Tensor | None = None
     finalIntegrationState: torch.Tensor | None = None
     jepaLoss: torch.Tensor | None = None
+    coordinateReadout: torch.Tensor | None = None
 
 
 SELF_LOCALIZE = "self_localize"
@@ -47,6 +48,12 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
+        self.manifoldCoordinateReadout = nn.Sequential(
+            nn.Linear(self.hiddenSize, self.hiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.hiddenSize, 2),
+            nn.Sigmoid(),
+        )
 
         if self.model_config.get("pretrain", False):
             self.trainingPhase = PRETRAIN
@@ -78,6 +85,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
             )
             jepaMemory, jepaLoss = self.jepa.forward_train(vision, action)
+            output.coordinateReadout = self.manifoldCoordinateReadout(
+                jepaMemory.detach()
+            )
             output.jepaMemory = jepaMemory
             output.jepaLoss = jepaLoss
 
@@ -141,6 +151,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             stateOut["jepaMemory"] = stateIn["jepaMemory"]
         else:
             stateOut["jepaMemory"] = controlOutputs.jepaMemory[:, -1, :]
+
+        if controlOutputs.coordinateReadout is not None:
+            finalOutput["coordinateReadout"] = controlOutputs.coordinateReadout
 
         if type(controlOutputs.predictedPlaces) is torch.Tensor:
             finalOutput["placeLogit"] = controlOutputs.predictedPlaces

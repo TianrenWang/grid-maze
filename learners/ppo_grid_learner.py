@@ -91,7 +91,16 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=jepaLoss.cpu().detach().numpy(),
                 window=100,
             )
-            return jepaLoss
+            _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
+            coordinates = coordinates[lossMask]
+            predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
+            coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
+            self.metrics.log_value(
+                key=(module_id, "coordinate_loss"),
+                value=coordinateLoss.cpu().detach().numpy(),
+                window=100,
+            )
+            return jepaLoss + coordinateLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

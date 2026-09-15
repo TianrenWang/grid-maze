@@ -34,6 +34,7 @@ class ControlOutputs:
     actualPlaces: torch.Tensor | None = None
     finalIntegrationState: torch.Tensor | None = None
     jepaLoss: torch.Tensor | None = None
+    coordinateReadout: torch.Tensor | None = None
 
 
 SELF_LOCALIZE = "self_localize"
@@ -47,6 +48,12 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
         self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
+        self.manifoldCoordinateReadout = nn.Sequential(
+            nn.Linear(self.hiddenSize, self.hiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.hiddenSize, 2),
+            nn.Sigmoid(),
+        )
 
         if self.model_config.get("pretrain", False):
             self.trainingPhase = PRETRAIN
@@ -77,13 +84,14 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             initialMemory = self._getInitialMemory(
                 prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
             )
-            jepaMemory, jepaLoss = self.jepa.forward_train(
+            jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
                 vision,
                 initialMemory,
                 torch.nn.functional.one_hot(
                     batch["actions"].to(torch.long), num_classes=4
                 ).to(torch.int32),
             )
+            output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
             output.jepaMemory = jepaMemory
             output.jepaLoss = jepaLoss
 
@@ -147,6 +155,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             stateOut["jepaMemory"] = stateIn["jepaMemory"]
         else:
             stateOut["jepaMemory"] = controlOutputs.jepaMemory[:, -1, :]
+
+        if controlOutputs.coordinateReadout is not None:
+            finalOutput["coordinateReadout"] = controlOutputs.coordinateReadout
 
         if type(controlOutputs.predictedPlaces) is torch.Tensor:
             finalOutput["placeLogit"] = controlOutputs.predictedPlaces

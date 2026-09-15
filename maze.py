@@ -48,7 +48,7 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
         innerRoomStartIndex = halfPoint - 15
 
         def createLandmark(
-            row: int, col: int, landmarkSize: int, omitId: int, omitSize: int = 1
+            row: int, col: int, landmarkSize: int, variant: int, numOnes: int
         ):
             for i in range(
                 innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
@@ -58,30 +58,30 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
                 ):
                     maze[i][j] = 0
 
-            omitRow = omitId // landmarkSize
-            omitCol = omitId % landmarkSize
+            rng = random.Random(variant)
+            positions = [
+                (i, j) for i in range(landmarkSize) for j in range(landmarkSize)
+            ]
 
-            for i in range(omitSize):
-                for j in range(omitSize):
-                    maze[innerRoomStartIndex + row + omitRow + i][
-                        innerRoomStartIndex + col + omitCol + j
-                    ] = 1
+            rng.shuffle(positions)
+            for i, j in positions[:numOnes]:
+                maze[innerRoomStartIndex + row + i][innerRoomStartIndex + col + j] = 1
 
-        createLandmark(3, 3, 3, 0)
-        createLandmark(3, 14, 3, 1)
-        createLandmark(3, 25, 3, 2)
-        createLandmark(14, 3, 3, 3)
-        createLandmark(14, 24, 3, 5)
-        createLandmark(25, 3, 3, 6)
-        createLandmark(25, 14, 3, 7)
-        createLandmark(25, 25, 3, 8)
+        createLandmark(3, 3, 5, 0, 5)
+        createLandmark(3, 13, 5, 1, 5)
+        createLandmark(3, 23, 5, 2, 5)
+        createLandmark(13, 3, 5, 3, 5)
+        createLandmark(13, 23, 5, 4, 5)
+        createLandmark(23, 3, 5, 5, 5)
+        createLandmark(23, 13, 5, 6, 5)
+        createLandmark(23, 23, 5, 7, 5)
 
         createLandmark(8, 8, 3, 0, 2)
         createLandmark(8, 20, 3, 1, 2)
         createLandmark(20, 8, 3, 3, 2)
         createLandmark(20, 20, 3, 4, 2)
 
-        createLandmark(13, 13, 5, 0)
+        createLandmark(13, 13, 5, 8, 12)
         maze[innerRoomStartIndex + 13][innerRoomStartIndex + 13] = 0
 
     return maze

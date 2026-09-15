@@ -45,7 +45,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
+        self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
 
         if self.model_config.get("pretrain", False):

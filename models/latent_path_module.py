@@ -67,7 +67,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         }
 
     def _getPolicyAndValue(self, batch):
-        vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         output = ControlOutputs()
 
         if self.trainingPhase == LEARN_MANIFOLD and "actions" in batch:
@@ -77,13 +77,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             initialMemory = self._getInitialMemory(
                 prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
             )
-            jepaMemory, jepaLoss = self.jepa.forward_train(
-                vision,
-                initialMemory,
-                torch.nn.functional.one_hot(
-                    batch["actions"].to(torch.long), num_classes=4
-                ).to(torch.int32),
-            )
+            jepaMemory, jepaLoss = self.jepa.forward_train(vision, action)
             output.jepaMemory = jepaMemory
             output.jepaLoss = jepaLoss
 

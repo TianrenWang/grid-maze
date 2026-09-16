@@ -50,6 +50,14 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.15, landmarks: bool = Tr
         def createLandmark(
             row: int, col: int, landmarkSize: int, variant: int, numOnes: int
         ):
+            for i in range(
+                innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
+            ):
+                for j in range(
+                    innerRoomStartIndex + col, innerRoomStartIndex + col + landmarkSize
+                ):
+                    maze[i][j] = 1
+
             rng = random.Random(variant)
             positions = [
                 (i, j) for i in range(landmarkSize) for j in range(landmarkSize)
@@ -59,7 +67,7 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.15, landmarks: bool = Tr
             for i, j in positions[:numOnes]:
                 maze[innerRoomStartIndex + row + i][innerRoomStartIndex + col + j] = 0
 
-        createLandmark(0, 0, 31, 0, 31 * 31 // 7)
+        createLandmark(0, 0, 31, 0, int(31 * 31 / 6.66))
 
         for i in range(size):
             for j in range(size):
@@ -92,5 +100,5 @@ def getMazeDebugString(maze):
 
 
 if __name__ == "__main__":
-    maze = generateMaze(100)
+    maze = generateMaze(41)
     print(getMazeDebugString(maze))

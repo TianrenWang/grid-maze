@@ -36,7 +36,7 @@ def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
-def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = True):
+def generateMaze(size: int = 200, p_obstacle: float = 0.15, landmarks: bool = True):
     maze = [[1 for _ in range(size)] for _ in range(size)]
     for i in range(size):
         for j in range(size):
@@ -50,14 +50,6 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
         def createLandmark(
             row: int, col: int, landmarkSize: int, variant: int, numOnes: int
         ):
-            for i in range(
-                innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
-            ):
-                for j in range(
-                    innerRoomStartIndex + col, innerRoomStartIndex + col + landmarkSize
-                ):
-                    maze[i][j] = 0
-
             rng = random.Random(variant)
             positions = [
                 (i, j) for i in range(landmarkSize) for j in range(landmarkSize)
@@ -65,24 +57,14 @@ def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = Tru
 
             rng.shuffle(positions)
             for i, j in positions[:numOnes]:
-                maze[innerRoomStartIndex + row + i][innerRoomStartIndex + col + j] = 1
+                maze[innerRoomStartIndex + row + i][innerRoomStartIndex + col + j] = 0
 
-        createLandmark(3, 3, 5, 0, 5)
-        createLandmark(3, 13, 5, 1, 5)
-        createLandmark(3, 23, 5, 2, 5)
-        createLandmark(13, 3, 5, 3, 5)
-        createLandmark(13, 23, 5, 4, 5)
-        createLandmark(23, 3, 5, 5, 5)
-        createLandmark(23, 13, 5, 6, 5)
-        createLandmark(23, 23, 5, 7, 5)
+        createLandmark(0, 0, 31, 0, 31 * 31 // 7)
 
-        createLandmark(8, 8, 3, 0, 2)
-        createLandmark(8, 20, 3, 1, 2)
-        createLandmark(20, 8, 3, 3, 2)
-        createLandmark(20, 20, 3, 4, 2)
-
-        createLandmark(13, 13, 5, 8, 12)
-        maze[innerRoomStartIndex + 13][innerRoomStartIndex + 13] = 0
+        for i in range(size):
+            for j in range(size):
+                if random.random() < 0.05:
+                    maze[i][j] = 0
 
     return maze
 

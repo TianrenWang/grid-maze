@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-NUM_CHANNELS = 1
+NUM_CHANNELS = 3
 
 
 class SimpleConv(nn.Module):

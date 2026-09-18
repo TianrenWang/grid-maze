@@ -121,10 +121,10 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2
+        visionSize = self.inputSize**2 * 3
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 1]
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)

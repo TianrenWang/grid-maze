@@ -108,62 +108,61 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         output = ControlOutputs()
 
-        if "actions" in batch:
-            if self.trainingPhase == LEARN_JEPA:
-                jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
-                    vision,
-                    action,
-                )
-                output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
-                output.jepaMemory = jepaMemory
-                output.jepaLoss = jepaLoss
+        if self.trainingPhase == LEARN_JEPA:
+            jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
+                vision,
+                action,
+            )
+            output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
+            output.jepaMemory = jepaMemory
+            output.jepaLoss = jepaLoss
 
-                obs = batch["obs"]
-                output.policy = torch.ones(
-                    [*obs.shape[:2], self.action_space.n],
+            obs = batch["obs"]
+            output.policy = torch.ones(
+                [*obs.shape[:2], self.action_space.n],
+                dtype=torch.float32,
+                device=obs.device,
+            )
+            output.memory = torch.randn(
+                [*obs.shape[:2], self.linearHiddenSize],
+                dtype=torch.float32,
+                device=obs.device,
+            )
+            output.value = torch.ones(
+                [*obs.shape[:2], 1], dtype=torch.float32, device=obs.device
+            )
+
+            return output
+        elif self.trainingPhase == LEARN_MANIFOLD:
+            jepaMemory = self.jepa.forward(vision)
+            previousJEPAMemory = batch[Columns.STATE_IN]["jepaMemory"]
+            initialCoordinateMask = torch.sum(previousJEPAMemory, -1) == 0
+            startingPlace = torch.where(
+                initialCoordinateMask[:, None],
+                self.place_projector(previousJEPAMemory) @ self.placeCells,
+                batch[Columns.STATE_IN]["manifoldCoordinate"],
+            )
+            jepaLatent = self.jepa.forward(vision)
+            displacement = self._getDisplacement(
+                torch.concat([jepaLatent, action], dim=-1)
+            )
+            firstDisplacement = displacement[:, 0, :]
+            startingDisplacement = torch.where(
+                initialCoordinateMask[:, None],
+                torch.zeros(
+                    firstDisplacement.shape,
                     dtype=torch.float32,
-                    device=obs.device,
-                )
-                output.memory = torch.randn(
-                    [*obs.shape[:2], self.linearHiddenSize],
-                    dtype=torch.float32,
-                    device=obs.device,
-                )
-                output.value = torch.ones(
-                    [*obs.shape[:2], 1], dtype=torch.float32, device=obs.device
-                )
+                    device=firstDisplacement.device,
+                ),
+                firstDisplacement,
+            )
+            displacement[:, 0, :] = startingDisplacement
+            output.manifoldCoordinate = startingPlace.unsqueeze(1) + torch.cumsum(
+                displacement, dim=1
+            )
+            output.jepaMemory = jepaMemory
+            return output
 
-                return output
-            elif self.trainingPhase == LEARN_MANIFOLD:
-                previousJEPAMemory = batch[Columns.STATE_IN]["jepaMemory"]
-                initialCoordinateMask = torch.sum(previousJEPAMemory, -1) == 0
-                startingPlace = torch.where(
-                    initialCoordinateMask[:, None],
-                    self.place_projector(previousJEPAMemory) @ self.placeCells,
-                    batch[Columns.STATE_IN]["manifoldCoordinate"],
-                )
-                jepaLatent = self.jepa.forward(vision)
-                displacement = self._getDisplacement(
-                    torch.concat([jepaLatent, action], dim=-1)
-                )
-                firstDisplacement = displacement[:, 0, :]
-                startingDisplacement = torch.where(
-                    initialCoordinateMask[:, None],
-                    torch.zeros(
-                        firstDisplacement.shape,
-                        dtype=torch.float32,
-                        device=firstDisplacement.device,
-                    ),
-                    firstDisplacement,
-                )
-                displacement[:, 0, :] = startingDisplacement
-                output.manifoldCoordinate = startingPlace.unsqueeze(1) + torch.cumsum(
-                    displacement, dim=1
-                )
-                output.jepaMemory = jepaMemory
-                return output
-
-        jepaMemory = self.jepa.forward(vision)
         prevPlaces = self.placeEncoderForMemory(
             calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
         )

@@ -42,9 +42,10 @@ parser.add_argument("--pureCode", action="store_true")
 parser.add_argument("--entropy", type=float, default=0.1)
 parser.add_argument("--visionPolicy", action="store_true")
 parser.add_argument("--learnManifold", action="store_true")
+parser.add_argument("--learnJEPA", action="store_true")
 args = parser.parse_args()
 
-if args.pretrain or args.learnManifold:
+if args.pretrain or args.learnManifold or args.learnJEPA:
     args.latentPath = True
 
 
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize or args.learnManifold:
+    if args.selfLocalize or args.learnManifold or args.learnJEPA:
         env = SmoothExplorationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
@@ -126,7 +127,8 @@ if __name__ == "__main__":
                     "self_localize": args.selfLocalize,
                     "pretrain": args.pretrain,
                     "visionPolicy": args.visionPolicy,
-                    "learnManifold": args.learnManifold,
+                    "learnManifold": args.learnJEPA,
+                    "jepa": args.jepa,
                 },
             ),
         )

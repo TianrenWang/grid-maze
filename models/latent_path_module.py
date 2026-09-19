@@ -39,6 +39,7 @@ class ControlOutputs:
 
 SELF_LOCALIZE = "self_localize"
 LEARN_MANIFOLD = "learnManifold"
+LEARN_JEPA = "learnJEPA"
 PRETRAIN = "pretrain"
 
 
@@ -77,7 +78,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         output = ControlOutputs()
 
-        if self.trainingPhase == LEARN_MANIFOLD and "actions" in batch:
+        if self.trainingPhase == LEARN_JEPA and "actions" in batch:
             prevPlaces = self.placeEncoderForJEPA(
                 calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
             )

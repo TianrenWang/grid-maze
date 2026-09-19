@@ -115,6 +115,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         module = self.module[DEFAULT_MODULE_ID]
         if (
             type(module) is models.LatentPathModule
-            and module.trainingPhase == "learnManifold"
+            and module.trainingPhase == "learnJEPA"
         ):
             module.jepa.EMAEncoder.update()

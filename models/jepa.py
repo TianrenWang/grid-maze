@@ -34,13 +34,16 @@ class JEPA(nn.Module):
             min_value=0.9999,
         )
 
-    def forward(self, vision: torch.Tensor, initialMemory: torch.Tensor):
-        contextLatent = self.encoder(vision)
-        memory, _ = self.memory(contextLatent, initialMemory.unsqueeze(0))
+    def _getContext(self, vision: torch.Tensor):
+        return self.encoder(vision[:, 0, :, :, :].unsqueeze(1)).squeeze(1)
+
+    def forward(self, vision: torch.Tensor, action: torch.Tensor):
+        contextLatent = self._getContext(vision)
+        memory, _ = self.memory(action, contextLatent.unsqueeze(0))
         return memory
 
     def forward_train(self, vision: torch.Tensor, action: torch.Tensor):
-        contextLatent = self.encoder(vision[:, 0, :, :, :].unsqueeze(1)).squeeze(1)
+        contextLatent = self._getContext(vision)
         memory, _ = self.memory(action, contextLatent.unsqueeze(0))
         predictedLatent = self.predictor(memory)
         targetLatent = self.EMAEncoder(vision).detach()

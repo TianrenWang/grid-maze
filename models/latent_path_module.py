@@ -109,6 +109,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
             return output
 
+        jepaMemory = self.jepa.forward(vision, action)
         prevPlaces = self.placeEncoderForMemory(
             calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
         )
@@ -120,7 +121,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         policy = self.policy_branch(memory)
         value = self.value_branch(memory)
 
-        output = ControlOutputs(policy=policy, value=value, memory=memory)
+        output = ControlOutputs(
+            policy=policy, value=value, memory=memory, jepaMemory=jepaMemory
+        )
 
         if self.trainingPhase == PRETRAIN:
             return output

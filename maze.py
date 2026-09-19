@@ -1,5 +1,8 @@
 import random
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     rows, cols = dimensions
@@ -36,12 +39,53 @@ def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
-def generateMaze(size: int, p_obstacle: float = 0.2):
-    maze = [[1 for _ in range(size)] for _ in range(size)]
+def hasAmbiguousRegions(maze) -> bool:
+    for i in range(85, 85 + 31):
+        for j in range(85, 85 + 31):
+            obs = maze[i - 4 : i + 5, j - 4 : j + 5, 0]
+            if obs.sum() == 0:
+                return True
+    return False
+
+
+def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = True):
+    maze = [[(0, 0, 0) for _ in range(size)] for _ in range(size)]
     for i in range(size):
         for j in range(size):
             if random.random() < p_obstacle:
-                maze[i][j] = 0
+                maze[i][j] = (0.2, 0.2, 0.2)
+
+    if landmarks:
+        halfPoint = size // 2
+        innerRoomStartIndex = halfPoint - 15
+
+        def createLandmark(row: int, col: int, color: tuple[float, float, float]):
+            maze[innerRoomStartIndex + row][innerRoomStartIndex + col] = color
+
+        rng = random.Random(0)
+
+        numLandmarks = 70
+        colors = [
+            (rng.random(), rng.random(), rng.random()) for _ in range(numLandmarks)
+        ]
+        coordinates = [
+            (rng.randint(0, 30), rng.randint(0, 30)) for _ in range(numLandmarks)
+        ]
+
+        # validator = np.zeros([size, size, 1])
+
+        for i, coordinate in enumerate(coordinates):
+            createLandmark(coordinate[0], coordinate[1], colors[i])
+            # validator[
+            #     innerRoomStartIndex + coordinate[0],
+            #     innerRoomStartIndex + coordinate[1],
+            #     0,
+            # ] = 1
+
+        createLandmark(15, 15, (1, 1, 1))  # goal landmark
+        # validator[innerRoomStartIndex + 15, innerRoomStartIndex + 15, 0] = 1
+        # print(hasAmbiguousRegions(validator))
+
     return maze
 
 
@@ -68,5 +112,7 @@ def getMazeDebugString(maze):
 
 
 if __name__ == "__main__":
-    maze = generateMaze(20)
-    print(getMazeDebugString(maze))
+    maze = generateMaze(200)
+    plt.imshow(np.array(maze))
+    plt.axis("off")
+    plt.show()

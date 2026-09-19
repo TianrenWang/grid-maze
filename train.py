@@ -14,17 +14,17 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 import models
-from environments import MazeEnv, PlaceMazeEnv, SelfLocalizeEnv
+from environments import MazeEnv, PlaceMazeEnv, SmoothExplorationEnv
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 from maze import generateMaze, getMazeDebugString
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mazeSize", type=int, default=30)
+parser.add_argument("--mazeSize", type=int, default=31)
 parser.add_argument("--mazeName", type=str, default="default_maze")
 parser.add_argument("--staticMaze", action="store_false", dest="randomMaze")
-parser.add_argument("--hiddenSize", type=int, default=8)
+parser.add_argument("--hiddenSize", type=int, default=32)
 parser.add_argument("--numLayers", type=int, default=2)
-parser.add_argument("--maxSteps", type=int, default=200)
+parser.add_argument("--maxSteps", type=int, default=58)
 parser.add_argument("--lr", type=float, default=1e-5)
 parser.add_argument("--expName", type=str, default="default_exp")
 parser.add_argument("--numLearn", type=int, default=4000)
@@ -47,9 +47,6 @@ args = parser.parse_args()
 if args.pretrain or args.learnManifold:
     args.latentPath = True
 
-if args.learnManifold:
-    args.selfLocalize = True
-
 
 def usesGrid():
     return args.grid or args.selfLocalize or args.latentPath or args.pureCode
@@ -63,9 +60,7 @@ if __name__ == "__main__":
     maze = None
     evalMaxSteps = 200
 
-    if args.selfLocalize:
-        maze = generateMaze(mazeSize, 0)
-    elif not args.randomMaze:
+    if not args.randomMaze:
         if not os.path.exists(mazesPath):
             os.makedirs(mazesPath)
         mazes = os.listdir(mazesPath)
@@ -93,8 +88,8 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize:
-        env = SelfLocalizeEnv
+    if args.selfLocalize or args.learnManifold:
+        env = SmoothExplorationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:
@@ -185,6 +180,10 @@ if __name__ == "__main__":
                     if "jepa_loss" in trainingOutputs:
                         jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
                         print("JEPA Loss:", jepaLoss)
+
+                    if "coordinate_loss" in trainingOutputs:
+                        coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
+                        print("Coordinate Loss:", coordinateLoss)
 
                     if "movement_loss" in trainingOutputs:
                         movementLoss = np.round(trainingOutputs["movement_loss"], 2)

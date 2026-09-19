@@ -4,6 +4,7 @@ import os
 import shutil
 import uuid
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from ray.rllib.core import DEFAULT_MODULE_ID
@@ -11,18 +12,87 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.rl_module import RLModule
 
 import models
-from environments import PlaceMazeEnv
+from environments import SmoothExplorationEnv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--expName", type=str, default="default_exp")
+parser.add_argument("--statistics", action="store_true")
 args = parser.parse_args()
 
 
-def generateLatents(mazeSize: int, modulePath: str, expName: str):
-    env = PlaceMazeEnv(
+def group_similarity_matrix(groups):
+    """
+    groups = {
+        "hash1": [vec1, vec2, ...],
+        "hash2": [vec3, vec4, ...],
+        ...
+    }
+
+    Returns:
+        group_ids: list of group hashes
+        matrix: NxN average cosine similarity matrix
+    """
+
+    group_ids = list(groups)
+
+    # Normalize vectors
+    normalized = {}
+    for group_id, vectors in groups.items():
+        X = np.asarray(vectors, dtype=float)
+        X /= np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-12)
+        normalized[group_id] = X
+
+    n = len(group_ids)
+    matrix = np.zeros((n, n))
+
+    for i, group_a in enumerate(group_ids):
+        for j, group_b in enumerate(group_ids):
+            sims = normalized[group_a] @ normalized[group_b].T
+
+            if i == j:
+                # Exclude self-similarity (always 1.0)
+                sims = sims[~np.eye(len(sims), dtype=bool)]
+
+            matrix[i, j] = sims.mean()
+
+    # Human-readable output
+    print("Group similarity (average cosine similarity)")
+    print()
+
+    # Short numeric group labels
+    labels = [str(g)[:8] for g in group_ids]
+
+    print(f"{'':>10}", end="")
+    for label in labels:
+        print(f"{label:>10}", end="")
+    print()
+
+    for i, label in enumerate(labels):
+        print(f"{label:>10}", end="")
+        for j in range(n):
+            print(f"{matrix[i, j]:10.3f}", end="")
+        print()
+
+    # totalSelfSimilarity = 0
+    # totalAverageSimilarity = 0
+    # totalMaxSimilarity = 0
+    # for i, label in enumerate(labels):
+    #     totalSelfSimilarity += matrix[i, i]
+    #     totalAverageSimilarity += matrix[i].mean()
+    #     totalMaxSimilarity += matrix[i].max()
+    # print("Self:", totalSelfSimilarity / len(labels))
+    # print("Average:", totalAverageSimilarity / len(labels))
+    # print("Max:", totalMaxSimilarity / len(labels))
+
+    return group_ids, matrix
+
+
+def generateLatents(
+    mazeSize: int, modulePath: str, expName: str, statistics: bool = False
+):
+    env = SmoothExplorationEnv(
         {
             "maze": None,
-            "goal": (mazeSize // 2, mazeSize // 2),
             "start": None,
             "maxSteps": 30,
             "mazeSize": mazeSize,
@@ -34,9 +104,13 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
     encounteredStates = set()
     latentStates = []
     stateLabels = []
-    episodeRenders = {}
+    positionInfos = {}
+    latentsByPosition: dict[str, list[np.ndarray]] = {}
+    positions: dict[str, tuple[int, int]] = {}
 
-    while episodes < 300:
+    while episodes < (2000 if statistics else 200):
+        if episodes % 100 == 0 and statistics:
+            print(episodes)
         gameId = str(uuid.uuid4())[:8]
         previousState = module.get_initial_state()
         obs, _ = env.reset()
@@ -49,9 +123,9 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                     k: torch.reshape(v, [1, -1]) for k, v in previousState.items()
                 },
             }
-            rl_module_out = module.forward_exploration(batched_obs)
+            rl_module_out = module.forward(batched_obs)
             latent = (
-                rl_module_out[Columns.STATE_OUT]["hiddenObs"]
+                rl_module_out[Columns.STATE_OUT]["jepaMemory"]
                 .detach()
                 .cpu()
                 .numpy()
@@ -71,30 +145,48 @@ def generateLatents(mazeSize: int, modulePath: str, expName: str):
                 encounteredStates.add(str(latent))
                 latentStates.append(latent)
                 numberOfDigitsInEpisodeLen = len(str(env._episode_len))
-                stateLabels.append(
-                    [
-                        gameId,
-                        env._episode_len,
-                        f"{gameId}-{(3 - numberOfDigitsInEpisodeLen) * '0'}{env._episode_len}",
-                        np.round(env._agentLocation, decimals=2).tolist(),
-                        np.abs(env._agentLocation - env._goalLocation).sum() < 1.01,
-                        np.round(np.max(actionDistribution), 2),
-                    ]
+                positionId = f"{gameId}-{(3 - numberOfDigitsInEpisodeLen) * '0'}{env._episode_len}"
+                labels = [
+                    gameId,
+                    env._episode_len,
+                    positionId,
+                    env._agentLocation.tolist(),
+                    np.abs(env._agentLocation - env._goalLocation).sum() < 1.01,
+                    np.round(np.max(actionDistribution), 2),
+                ]
+                stateLabels.append(labels)
+                positionInfos[positionId] = (
+                    obs.flatten()[: 9**2 * 3].reshape(9, 9, 3).numpy()
                 )
+                positionString = str(env._agentLocation.tolist())
+                if positionString not in latentsByPosition:
+                    latentsByPosition[positionString] = [latent]
+                    positions[positionString] = env._agentLocation.tolist()
+                else:
+                    latentsByPosition[positionString].append(latent)
 
             action = np.random.choice(4, p=actionDistribution)
             obs, _, done, truncated, _ = env.step(action)
             done = done or truncated
             previousState = rl_module_out[Columns.STATE_OUT]
 
-        episodeRenders[gameId] = env.render()
-
         episodes += 1
 
-    saveGameData(latentStates, stateLabels, expName)
-    while True:
-        gameId = input("Enter game ID: ")
-        print(episodeRenders[gameId])
+    if statistics:
+        latentsByPositionTrue = {}
+        positionsTrue = {}
+        for key, latents in latentsByPosition.items():
+            if len(latents) > 30 and len(latentsByPositionTrue) < 14:
+                latentsByPositionTrue[key] = latents
+                positionsTrue[key] = positions[key]
+        group_similarity_matrix(latentsByPositionTrue)
+    else:
+        saveGameData(latentStates, stateLabels, expName)
+        while True:
+            pos1Id = input("Pos1 ID: ")
+            plt.imshow(positionInfos[pos1Id])
+            plt.axis("off")
+            plt.show()
 
 
 def saveGameData(
@@ -150,4 +242,5 @@ if __name__ == "__main__":
         mazeSize,
         rlModulePath,
         args.expName,
+        args.statistics,
     )

@@ -84,10 +84,11 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             initialMemory = self._getInitialMemory(
                 prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
             )
-            jepaMemory, jepaLoss = self.jepa.forward_train(vision, action)
-            output.coordinateReadout = self.manifoldCoordinateReadout(
-                jepaMemory.detach()
+            jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
+                vision,
+                action,
             )
+            output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
             output.jepaMemory = jepaMemory
             output.jepaLoss = jepaLoss
 

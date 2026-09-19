@@ -1,5 +1,8 @@
 import random
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     rows, cols = dimensions
@@ -36,53 +39,52 @@ def generateDeprecatedMaze(dimensions: tuple[int], goal: tuple[int]):
     return maze
 
 
+def hasAmbiguousRegions(maze) -> bool:
+    for i in range(85, 85 + 31):
+        for j in range(85, 85 + 31):
+            obs = maze[i - 4 : i + 5, j - 4 : j + 5, 0]
+            if obs.sum() == 0:
+                return True
+    return False
+
+
 def generateMaze(size: int = 200, p_obstacle: float = 0.1, landmarks: bool = True):
-    maze = [[1 for _ in range(size)] for _ in range(size)]
+    maze = [[(0, 0, 0) for _ in range(size)] for _ in range(size)]
     for i in range(size):
         for j in range(size):
             if random.random() < p_obstacle:
-                maze[i][j] = 0
+                maze[i][j] = (0.2, 0.2, 0.2)
 
     if landmarks:
         halfPoint = size // 2
         innerRoomStartIndex = halfPoint - 15
 
-        def createLandmark(
-            row: int, col: int, landmarkSize: int, variant: int, numOnes: int
-        ):
-            for i in range(
-                innerRoomStartIndex + row, innerRoomStartIndex + row + landmarkSize
-            ):
-                for j in range(
-                    innerRoomStartIndex + col, innerRoomStartIndex + col + landmarkSize
-                ):
-                    maze[i][j] = 0
+        def createLandmark(row: int, col: int, color: tuple[float, float, float]):
+            maze[innerRoomStartIndex + row][innerRoomStartIndex + col] = color
 
-            rng = random.Random(variant)
-            positions = [
-                (i, j) for i in range(landmarkSize) for j in range(landmarkSize)
-            ]
+        rng = random.Random(0)
 
-            rng.shuffle(positions)
-            for i, j in positions[:numOnes]:
-                maze[innerRoomStartIndex + row + i][innerRoomStartIndex + col + j] = 1
+        numLandmarks = 70
+        colors = [
+            (rng.random(), rng.random(), rng.random()) for _ in range(numLandmarks)
+        ]
+        coordinates = [
+            (rng.randint(0, 30), rng.randint(0, 30)) for _ in range(numLandmarks)
+        ]
 
-        createLandmark(3, 3, 5, 0, 5)
-        createLandmark(3, 13, 5, 1, 5)
-        createLandmark(3, 23, 5, 2, 5)
-        createLandmark(13, 3, 5, 3, 5)
-        createLandmark(13, 23, 5, 4, 5)
-        createLandmark(23, 3, 5, 5, 5)
-        createLandmark(23, 13, 5, 6, 5)
-        createLandmark(23, 23, 5, 7, 5)
+        # validator = np.zeros([size, size, 1])
 
-        createLandmark(8, 8, 3, 0, 2)
-        createLandmark(8, 20, 3, 1, 2)
-        createLandmark(20, 8, 3, 3, 2)
-        createLandmark(20, 20, 3, 4, 2)
+        for i, coordinate in enumerate(coordinates):
+            createLandmark(coordinate[0], coordinate[1], colors[i])
+            # validator[
+            #     innerRoomStartIndex + coordinate[0],
+            #     innerRoomStartIndex + coordinate[1],
+            #     0,
+            # ] = 1
 
-        createLandmark(13, 13, 5, 8, 12)
-        maze[innerRoomStartIndex + 13][innerRoomStartIndex + 13] = 0
+        createLandmark(15, 15, (1, 1, 1))  # goal landmark
+        # validator[innerRoomStartIndex + 15, innerRoomStartIndex + 15, 0] = 1
+        # print(hasAmbiguousRegions(validator))
 
     return maze
 
@@ -110,5 +112,7 @@ def getMazeDebugString(maze):
 
 
 if __name__ == "__main__":
-    maze = generateMaze(100)
-    print(getMazeDebugString(maze))
+    maze = generateMaze(200)
+    plt.imshow(np.array(maze))
+    plt.axis("off")
+    plt.show()

@@ -31,7 +31,7 @@ class MazeEnv(gym.Env):
         )
         self.observation_space = gym.spaces.Dict(
             {
-                "vision": gym.spaces.MultiBinary((self._mazeSize, self._mazeSize, 1)),
+                "vision": gym.spaces.MultiBinary((self._mazeSize, self._mazeSize, 3)),
             }
         )
         self.action_space = gym.spaces.Discrete(4)
@@ -99,7 +99,7 @@ class MazeEnv(gym.Env):
         self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
 
         self._pastLocation = self._agentLocation
-        self._map = np.expand_dims(self._mazeArray, axis=2)
+        self._map = np.array(self._mazeArray)
         self._episode_len = 0
         self.previousActions = deque()
         self._visitCounts = [
@@ -173,7 +173,7 @@ class FoggedMazeEnv(MazeEnv):
         self._visualRange = config.get("visualRange", 4)
         visualObsSize = self._visualRange * 2 + 1
         self.observation_space = gym.spaces.MultiBinary(
-            (visualObsSize, visualObsSize, 2)
+            (visualObsSize, visualObsSize, 3)
         )
 
     def _getObs(self):
@@ -200,7 +200,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         visualObsSize = self._visualRange * 2 + 1
         self._lastLocation = self._agentLocation
         self.observation_space = gym.spaces.Box(
-            -2, 2, (visualObsSize**2 + 4 + self.action_space.n + 1,)
+            -2, 2, (visualObsSize**2 * 3 + 4 + self.action_space.n + 1,)
         )
         self._forcedGoal = None
         self._perturb = config.get("perturb", False)

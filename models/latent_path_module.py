@@ -46,7 +46,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
+        self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
         self.manifoldCoordinateReadout = nn.Sequential(
             nn.Linear(self.hiddenSize, self.hiddenSize),
@@ -74,7 +74,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         }
 
     def _getPolicyAndValue(self, batch):
-        vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
         output = ControlOutputs()
 
         if self.trainingPhase == LEARN_MANIFOLD and "actions" in batch:
@@ -86,10 +86,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             )
             jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
                 vision,
-                initialMemory,
-                torch.nn.functional.one_hot(
-                    batch["actions"].to(torch.long), num_classes=4
-                ).to(torch.int32),
+                action,
             )
             output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
             output.jepaMemory = jepaMemory

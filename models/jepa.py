@@ -24,12 +24,8 @@ class JEPA(nn.Module):
     def __init__(self, inputSize: int, latentSize: int, actionSize: int):
         super().__init__()
         self.encoder = Encoder(inputSize, latentSize)
-        self.memory = nn.GRU(latentSize, latentSize, batch_first=True)
-        self.predictor = nn.Sequential(
-            nn.Linear(latentSize + actionSize, latentSize),
-            nn.ReLU(),
-            nn.Linear(latentSize, latentSize),
-        )
+        self.memory = nn.GRU(actionSize, latentSize, batch_first=True)
+        self.predictor = nn.Linear(latentSize, latentSize)
         self.EMAEncoder = EMA(
             self.encoder,
             beta=0.9999,
@@ -43,18 +39,11 @@ class JEPA(nn.Module):
         memory, _ = self.memory(contextLatent, initialMemory.unsqueeze(0))
         return memory
 
-    def forward_train(
-        self, vision: torch.Tensor, initialMemory: torch.Tensor, action: torch.Tensor
-    ):
-        contextLatent = self.encoder(vision)
-        memory, _ = self.memory(contextLatent, initialMemory.unsqueeze(0))
-        predictedLatent = self.predictor(torch.concat([memory, action], dim=2))[
-            :, :-1, :
-        ]
+    def forward_train(self, vision: torch.Tensor, action: torch.Tensor):
+        contextLatent = self.encoder(vision[:, 0, :, :, :].unsqueeze(1)).squeeze(1)
+        memory, _ = self.memory(action, contextLatent.unsqueeze(0))
+        predictedLatent = self.predictor(memory)
         targetLatent = self.EMAEncoder(vision).detach()
-        predictionLoss = torch.mean(
-            (predictedLatent - targetLatent[:, 1:, :]) ** 2, dim=-1
-        )
-        predictionLoss = torch.nn.functional.pad(predictionLoss, (0, 1))
+        predictionLoss = torch.mean((predictedLatent - targetLatent) ** 2, dim=-1)
 
         return memory, predictionLoss, targetLatent

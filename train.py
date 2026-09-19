@@ -127,8 +127,8 @@ if __name__ == "__main__":
                     "self_localize": args.selfLocalize,
                     "pretrain": args.pretrain,
                     "visionPolicy": args.visionPolicy,
-                    "learnManifold": args.learnJEPA,
-                    "jepa": args.jepa,
+                    "learnManifold": args.learnManifold,
+                    "learnJEPA": args.learnJEPA,
                 },
             ),
         )

@@ -68,21 +68,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                     value=predictionError.cpu().detach().numpy(),
                     window=100,
                 )
-
-            if "movements" in fwd_out:
-                movements: torch.Tensor = fwd_out["movements"][lossMask]
-                distances = torch.linalg.norm(movements, dim=1)
-                idealDistance = torch.mean(distances).detach()
-                movement_loss = torch.mean(
-                    ((distances - idealDistance) / idealDistance) ** 2
-                )
-                loss += movement_loss
-                self.metrics.log_value(
-                    key=(module_id, "movement_loss"),
-                    value=movement_loss.cpu().detach().numpy(),
-                    window=100,
-                )
-
             return loss
         elif "jepaLoss" in fwd_out:
             jepaLoss: torch.Tensor = fwd_out["jepaLoss"][lossMask].mean()
@@ -101,6 +86,27 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 window=100,
             )
             return jepaLoss + coordinateLoss
+        elif "manifoldCoordinate" in fwd_out:
+            sameStateThreshold = self.module[module_id].speed
+            jepaLatents = fwd_out["jepaMemory"][lossMask]
+            manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
+            similarity = torch.nn.functional.cosine_similarity(jepaLatents, jepaLatents)
+            distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
+            similarMask = similarity > 0.999
+            dissimilarLoss = distances[similarMask].mean()
+            dissimilarMask = similarity <= 0.999
+            dissimilarDistances = distances[dissimilarMask]
+            similarityLoss = (
+                sameStateThreshold
+                / dissimilarDistances[dissimilarDistances < sameStateThreshold]
+            )
+            coherenceLoss = dissimilarLoss + similarityLoss
+            self.metrics.log_value(
+                key=(module_id, "coherence_loss"),
+                value=coherenceLoss.cpu().detach().numpy(),
+                window=100,
+            )
+            return coherenceLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

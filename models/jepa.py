@@ -37,10 +37,8 @@ class JEPA(nn.Module):
     def _getContext(self, vision: torch.Tensor):
         return self.encoder(vision[:, 0, :, :, :].unsqueeze(1)).squeeze(1)
 
-    def forward(self, vision: torch.Tensor, action: torch.Tensor):
-        contextLatent = self._getContext(vision)
-        memory, _ = self.memory(action, contextLatent.unsqueeze(0))
-        return memory
+    def forward(self, vision: torch.Tensor):
+        return self.EMAEncoder(vision)
 
     def forward_train(self, vision: torch.Tensor, action: torch.Tensor):
         contextLatent = self._getContext(vision)

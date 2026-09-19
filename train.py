@@ -169,7 +169,7 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],  # noqa: DTZ005
                 )
-                if args.selfLocalize or args.learnManifold:
+                if args.selfLocalize or args.learnManifold or args.learnJEPA:
                     trainingOutputs = result["learners"]["default_policy"]
                     if "prediction_error" in trainingOutputs:
                         predictionError = np.round(

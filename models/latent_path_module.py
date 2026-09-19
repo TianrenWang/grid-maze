@@ -26,14 +26,15 @@ class ManifoldProjector(nn.Module):
 
 @dataclass
 class ControlOutputs:
-    policy: torch.Tensor
-    value: torch.Tensor
-    memory: torch.Tensor
+    policy: torch.Tensor | None = None
+    value: torch.Tensor | None = None
+    memory: torch.Tensor | None = None
     jepaMemory: torch.Tensor | None = None
     predictedPlaces: torch.Tensor | None = None
     actualPlaces: torch.Tensor | None = None
     finalIntegrationState: torch.Tensor | None = None
     jepaLoss: torch.Tensor | None = None
+    coordinateReadout: torch.Tensor | None = None
 
 
 SELF_LOCALIZE = "self_localize"
@@ -45,8 +46,14 @@ class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
         self.pathIntegrator = nn.LSTM(2, self.integratorSize, batch_first=True)
-        self.jepa = JEPA(self.inputSize, self.hiddenSize, self.action_space.n)
+        self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
+        self.manifoldCoordinateReadout = nn.Sequential(
+            nn.Linear(self.hiddenSize, self.hiddenSize),
+            nn.ReLU(),
+            nn.Linear(self.hiddenSize, 2),
+            nn.Sigmoid(),
+        )
 
         if self.model_config.get("pretrain", False):
             self.trainingPhase = PRETRAIN
@@ -67,7 +74,41 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         }
 
     def _getPolicyAndValue(self, batch):
-        vision, lastAgentLocation, _, _ = self._getObsFromBatch(batch)
+        vision, lastAgentLocation, _, action = self._getObsFromBatch(batch)
+        output = ControlOutputs()
+
+        if self.trainingPhase == LEARN_MANIFOLD and "actions" in batch:
+            prevPlaces = self.placeEncoderForJEPA(
+                calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
+            )
+            initialMemory = self._getInitialMemory(
+                prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
+            )
+            jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
+                vision,
+                action,
+            )
+            output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
+            output.jepaMemory = jepaMemory
+            output.jepaLoss = jepaLoss
+
+            obs = batch["obs"]
+            output.policy = torch.ones(
+                [*obs.shape[:2], self.action_space.n],
+                dtype=torch.float32,
+                device=obs.device,
+            )
+            output.memory = torch.randn(
+                [*obs.shape[:2], self.linearHiddenSize],
+                dtype=torch.float32,
+                device=obs.device,
+            )
+            output.value = torch.ones(
+                [*obs.shape[:2], 1], dtype=torch.float32, device=obs.device
+            )
+
+            return output
+
         prevPlaces = self.placeEncoderForMemory(
             calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
         )
@@ -75,40 +116,13 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             prevPlaces, batch[Columns.STATE_IN]["hiddenObs"]
         )
 
-        def getIntegration(startingCoordinate: torch.Tensor, movement: torch.Tensor):
-            return self._pathIntegrate(
-                startingCoordinate,
-                movement,
-                batch[Columns.STATE_IN]["hiddenGrid"],
-                batch[Columns.STATE_IN]["candidateGrid"],
-            )
-
         memory = self._processVisualMemory(vision, initialMemory)
         policy = self.policy_branch(memory)
         value = self.value_branch(memory)
 
         output = ControlOutputs(policy=policy, value=value, memory=memory)
 
-        if self.trainingPhase == PRETRAIN or "actions" not in batch:
-            return output
-
-        prevPlaces = self.placeEncoderForJEPA(
-            calculatePlace(self.placeCells, lastAgentLocation[:, 0, :])
-        )
-        initialMemory = self._getInitialMemory(
-            prevPlaces, batch[Columns.STATE_IN]["jepaMemory"]
-        )
-        jepaMemory, jepaLoss = self.jepa.forward_train(
-            vision,
-            initialMemory,
-            torch.nn.functional.one_hot(
-                batch["actions"].to(torch.long), num_classes=4
-            ).to(torch.int32),
-        )
-        output.jepaMemory = jepaMemory
-        output.jepaLoss = jepaLoss
-
-        if self.trainingPhase == LEARN_MANIFOLD:
+        if self.trainingPhase == PRETRAIN:
             return output
 
         return output
@@ -138,6 +152,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             stateOut["jepaMemory"] = stateIn["jepaMemory"]
         else:
             stateOut["jepaMemory"] = controlOutputs.jepaMemory[:, -1, :]
+
+        if controlOutputs.coordinateReadout is not None:
+            finalOutput["coordinateReadout"] = controlOutputs.coordinateReadout
 
         if type(controlOutputs.predictedPlaces) is torch.Tensor:
             finalOutput["placeLogit"] = controlOutputs.predictedPlaces

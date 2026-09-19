@@ -34,7 +34,7 @@ class SimpleMazeModule(TorchRLModule, ValueFunctionAPI):
         mapInput = batch[Columns.OBS]
         if type(mapInput) is dict:
             mapInput = mapInput["vision"]
-        mapInput = torch.reshape(mapInput, [-1, self.inputSize, self.inputSize, 3])
+        mapInput = torch.reshape(mapInput, [-1, self.inputSize, self.inputSize, 1])
         mapInput = mapInput.permute(0, 3, 1, 2).to(torch.float32)
         mapOutput = self.primaryConvModule(mapInput)
         return self.prePredictionHead(mapOutput)
@@ -121,10 +121,10 @@ class PathIntegrationWithVisionModule(MemoryMazeModule):
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2 * 2
+        visionSize = self.inputSize**2 * 3
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 2]
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 3]
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)

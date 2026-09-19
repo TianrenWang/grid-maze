@@ -1,12 +1,14 @@
 import torch
 from torch import nn
 
+NUM_CHANNELS = 3
+
 
 class SimpleConv(nn.Module):
     def __init__(self, hiddenSize: int):
         super().__init__()
         self.convolution = nn.Sequential(
-            nn.Conv2d(2, hiddenSize, kernel_size=3, padding=1),
+            nn.Conv2d(NUM_CHANNELS, hiddenSize, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(hiddenSize, hiddenSize * 2, kernel_size=3, padding=1, stride=2),
             nn.ReLU(),

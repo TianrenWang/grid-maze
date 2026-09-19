@@ -1,6 +1,6 @@
 import torch
-import torch.nn as nn
 from ray.rllib.core.columns import Columns
+from torch import nn
 
 from .agent_models import MemoryMazeModule
 from .utils import calculatePlace
@@ -15,10 +15,10 @@ class PlaceCellControlModule(MemoryMazeModule):
 
     def _getObsFromBatch(self, batch):
         obs = batch["obs"]
-        visionSize = self.inputSize**2 * 2
+        visionSize = self.inputSize**2
         vision = obs[:, :, :visionSize]
         vision = torch.reshape(
-            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 2]
+            vision, [*vision.shape[:2], self.inputSize, self.inputSize, 1]
         )
         lastAgentLocation = obs[:, :, visionSize : visionSize + 2]
         lastAgentLocation = lastAgentLocation.reshape(*lastAgentLocation.shape[:2], 2)

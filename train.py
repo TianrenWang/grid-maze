@@ -125,7 +125,6 @@ if __name__ == "__main__":
                     "max_seq_len": args.memoryLen,
                     "mazeSize": mazeSize,
                     "self_localize": args.selfLocalize,
-                    "pretrain": args.pretrain,
                     "visionPolicy": args.visionPolicy,
                     "learnManifold": args.learnManifold,
                     "learnJEPA": args.learnJEPA,
@@ -179,17 +178,15 @@ if __name__ == "__main__":
                         positionError = np.round(trainingOutputs["position_error"], 2)
                         print("Position Error:", positionError)
 
-                    if "jepa_loss" in trainingOutputs:
+                    if args.learnJEPA:
                         jepaLoss = np.round(trainingOutputs["jepa_loss"], 2)
                         print("JEPA Loss:", jepaLoss)
-
-                    if "coordinate_loss" in trainingOutputs:
                         coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
                         print("Coordinate Loss:", coordinateLoss)
 
-                    if "movement_loss" in trainingOutputs:
-                        movementLoss = np.round(trainingOutputs["movement_loss"], 2)
-                        print("Movement Loss:", movementLoss)
+                    if args.learnManifold:
+                        coherenceLoss = np.round(trainingOutputs["coherence_loss"], 2)
+                        print("Coherence Loss:", coherenceLoss)
                 else:
                     averageReturn = 0
                     averageSteps = 0

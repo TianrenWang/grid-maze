@@ -21,9 +21,8 @@ class SimpleConv(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shape = x.shape
 
-        assert len(shape) > 4, "SimpleConv was expecting a time dimension"
-
-        x = x.flatten(0, -4)
+        if len(shape) > 4:
+            x = x.flatten(0, -4)
         x = x.permute(0, 3, 1, 2).to(torch.float32)
         convolutedFeatures = self.convolution(x)
         return convolutedFeatures.reshape([*shape[:-3], *convolutedFeatures.shape[-3:]])

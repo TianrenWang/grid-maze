@@ -88,7 +88,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             return jepaLoss + coordinateLoss
         elif "manifoldCoordinate" in fwd_out:
             sameStateThreshold = self.module[module_id].speed
-            jepaLatents = fwd_out["jepaMemory"][lossMask]
+            jepaLatents = fwd_out["jepaLatent"][lossMask]
             manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
             similarity = torch.nn.functional.cosine_similarity(jepaLatents, jepaLatents)
             distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
@@ -99,7 +99,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             similarityLoss = (
                 sameStateThreshold
                 / dissimilarDistances[dissimilarDistances < sameStateThreshold]
-            )
+            ).mean()
             coherenceLoss = dissimilarLoss + similarityLoss
             self.metrics.log_value(
                 key=(module_id, "coherence_loss"),

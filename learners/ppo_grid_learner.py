@@ -87,20 +87,22 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             )
             return jepaLoss + coordinateLoss
         elif "manifoldCoordinate" in fwd_out:
-            sameStateThreshold = self.module[module_id].speed
             jepaLatents = fwd_out["jepaLatent"][lossMask]
             manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
-            similarity = torch.nn.functional.cosine_similarity(jepaLatents, jepaLatents)
+            normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
+            similarity = normalizedLatents @ normalizedLatents.T
             distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
-            similarMask = similarity > 0.999
+            similarMask = torch.triu(similarity > 0.999, diagonal=1)
             dissimilarLoss = distances[similarMask].mean()
-            dissimilarMask = similarity <= 0.999
-            dissimilarDistances = distances[dissimilarMask]
-            similarityLoss = (
-                sameStateThreshold
-                / dissimilarDistances[dissimilarDistances < sameStateThreshold]
+            overallMask = torch.triu(
+                torch.ones_like(similarity, dtype=torch.bool), diagonal=1
+            )
+            euclideanDistances = distances[overallMask]
+            cosineDistances = (1 - similarity[overallMask]) * (100 / 14)
+            overallLoss = (
+                -cosineDistances * torch.log(euclideanDistances + 1e-6)
             ).mean()
-            coherenceLoss = dissimilarLoss + similarityLoss
+            coherenceLoss = dissimilarLoss + overallLoss
             self.metrics.log_value(
                 key=(module_id, "coherence_loss"),
                 value=coherenceLoss.cpu().detach().numpy(),

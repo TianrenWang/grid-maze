@@ -119,8 +119,25 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 output.jepaLoss = jepaLoss
             else:
                 jepaLatent = self.jepa.forward(vision)
-                output.manifoldCoordinate = (
-                    self.place_projector(jepaLatent) @ self.placeCells
+                previousJEPAMemory = batch[Columns.STATE_IN]["jepaMemory"]
+                initialCoordinateMask = torch.sum(previousJEPAMemory, -1) == 0
+                startingPlace = self.place_projector(jepaLatent[:, 0]) @ self.placeCells
+                displacement = self._getDisplacement(
+                    torch.concat([jepaLatent, action], dim=-1)
+                )
+                firstDisplacement = displacement[:, 0, :]
+                startingDisplacement = torch.where(
+                    initialCoordinateMask[:, None],
+                    torch.zeros(
+                        firstDisplacement.shape,
+                        dtype=torch.float32,
+                        device=firstDisplacement.device,
+                    ),
+                    firstDisplacement,
+                )
+                displacement[:, 0, :] = startingDisplacement
+                output.manifoldCoordinate = startingPlace.unsqueeze(1) + torch.cumsum(
+                    displacement, dim=1
                 )
                 output.jepaLatent = jepaLatent
 

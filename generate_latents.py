@@ -102,6 +102,7 @@ def generateLatents(
         }
     )
     module: models.LatentPathModule = RLModule.from_checkpoint(modulePath)
+    module.trainingPhase = "learnManifold"
     obs, _ = env.reset()
     episodes = 0
     encounteredStates = set()

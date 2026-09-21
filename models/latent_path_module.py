@@ -70,6 +70,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.place_projector = nn.Sequential(
             nn.Linear(self.hiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
         )
+        self.similarityPredictor = nn.Sequential(nn.Linear(1, 1), nn.Sigmoid())
 
         if self.model_config.get(LEARN_JEPA, False):
             self.trainingPhase = LEARN_JEPA
@@ -118,25 +119,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 output.jepaLoss = jepaLoss
             else:
                 jepaLatent = self.jepa.forward(vision)
-                previousJEPAMemory = batch[Columns.STATE_IN]["jepaMemory"]
-                initialCoordinateMask = torch.sum(previousJEPAMemory, -1) == 0
-                startingPlace = self.place_projector(jepaLatent[:, 0]) @ self.placeCells
-                displacement = self._getDisplacement(
-                    torch.concat([jepaLatent, action], dim=-1)
-                )
-                firstDisplacement = displacement[:, 0, :]
-                startingDisplacement = torch.where(
-                    initialCoordinateMask[:, None],
-                    torch.zeros(
-                        firstDisplacement.shape,
-                        dtype=torch.float32,
-                        device=firstDisplacement.device,
-                    ),
-                    firstDisplacement,
-                )
-                displacement[:, 0, :] = startingDisplacement
-                output.manifoldCoordinate = startingPlace.unsqueeze(1) + torch.cumsum(
-                    displacement, dim=1
+                output.manifoldCoordinate = (
+                    self.place_projector(jepaLatent) @ self.placeCells
                 )
                 output.jepaLatent = jepaLatent
 

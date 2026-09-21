@@ -20,11 +20,12 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         batch: dict[str, dict],
         fwd_out: dict[str, torch.Tensor],
     ):
+        module = self.module[module_id]
         lossMask = batch["loss_mask"]
         if config.learner_config_dict.get("self_localize"):
             loss = 0
             if "placeLogit" in fwd_out and "placeTarget" in fwd_out:
-                parameters = self.module[module_id].named_parameters()
+                parameters = module.named_parameters()
                 placeCells = None
                 for name, weight in parameters:
                     if name == "placeCells":
@@ -87,22 +88,30 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             )
             return jepaLoss + coordinateLoss
         elif "manifoldCoordinate" in fwd_out:
+            speed = module.speed
             jepaLatents = fwd_out["jepaLatent"][lossMask]
             manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
             normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
             similarity = normalizedLatents @ normalizedLatents.T
             distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
-            similarMask = torch.triu(similarity > 0.999, diagonal=1)
-            dissimilarLoss = distances[similarMask].mean()
-            overallMask = torch.triu(
+            relevanceMask = torch.triu(
                 torch.ones_like(similarity, dtype=torch.bool), diagonal=1
             )
-            euclideanDistances = distances[overallMask]
-            cosineDistances = (1 - similarity[overallMask]) * (100 / 14)
-            overallLoss = (
-                -cosineDistances * torch.log(euclideanDistances + 1e-6)
-            ).mean()
-            coherenceLoss = dissimilarLoss + overallLoss
+            dissimilarMask = torch.triu(similarity <= 0.999, diagonal=1)
+            dissimilarDistances = distances[dissimilarMask]
+            similarity = similarity[relevanceMask]
+            distances = distances[relevanceMask]
+            similarityPrediction = module.similarityPredictor(distances.reshape(-1, 1))
+            targetSimilarity = (similarity > 0.99).float()
+
+            distanceLoss = torch.mean(
+                torch.relu((speed - dissimilarDistances) / speed) ** 2
+            )
+            coherenceLoss = torch.nn.functional.binary_cross_entropy(
+                similarityPrediction.flatten(), targetSimilarity
+            )
+            coherenceLoss += distanceLoss
+
             self.metrics.log_value(
                 key=(module_id, "coherence_loss"),
                 value=coherenceLoss.cpu().detach().numpy(),

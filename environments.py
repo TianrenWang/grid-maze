@@ -88,13 +88,7 @@ class MazeEnv(gym.Env):
             currentRow = []
             self._mazeTracker.append(currentRow)
             for j in range(self._actualMazeSize):
-                originalValue = self._mazeArray[i][j]
-                if not originalValue:
-                    currentRow.append("X")
-                elif originalValue == 1:
-                    currentRow.append(0)
-                else:
-                    currentRow.append(originalValue)
+                currentRow.append(0)
         self._mazeTracker[self._agentLocation[0]][self._agentLocation[1]] = "S"
         self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
 

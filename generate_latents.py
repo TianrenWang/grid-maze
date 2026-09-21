@@ -76,13 +76,16 @@ def group_similarity_matrix(groups):
     # totalSelfSimilarity = 0
     # totalAverageSimilarity = 0
     # totalMaxSimilarity = 0
+    # totalMinSimilarity = 0
     # for i, label in enumerate(labels):
     #     totalSelfSimilarity += matrix[i, i]
     #     totalAverageSimilarity += matrix[i].mean()
     #     totalMaxSimilarity += matrix[i].max()
+    #     totalMinSimilarity += matrix[i].min()
     # print("Self:", totalSelfSimilarity / len(labels))
     # print("Average:", totalAverageSimilarity / len(labels))
     # print("Max:", totalMaxSimilarity / len(labels))
+    # print("Min:", totalMinSimilarity / len(labels))
 
     return group_ids, matrix
 
@@ -125,12 +128,7 @@ def generateLatents(
             }
             rl_module_out = module.forward(batched_obs)
             latent = (
-                rl_module_out[Columns.STATE_OUT]["jepaMemory"]
-                .detach()
-                .cpu()
-                .numpy()
-                .flatten()
-                .tolist()
+                rl_module_out["jepaLatent"].detach().cpu().numpy().flatten().tolist()
             )
             actionDistribution = (
                 torch.softmax(
@@ -176,7 +174,7 @@ def generateLatents(
         latentsByPositionTrue = {}
         positionsTrue = {}
         for key, latents in latentsByPosition.items():
-            if len(latents) > 30 and len(latentsByPositionTrue) < 14:
+            if len(latents) > 30 and len(latentsByPositionTrue) < 17:
                 latentsByPositionTrue[key] = latents
                 positionsTrue[key] = positions[key]
         group_similarity_matrix(latentsByPositionTrue)

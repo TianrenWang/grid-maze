@@ -93,8 +93,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
     def _getDisplacement(self, latent: torch.Tensor) -> torch.Tensor:
         angle = self.directionDecoder(latent) * math.pi
-        theta = math.pi * angle
-        return torch.cat([torch.cos(theta), torch.sin(theta)], dim=-1) * self.speed
+        return torch.cat([torch.cos(angle), torch.sin(angle)], dim=-1) * self.speed
 
     def _getPlaceActivationFromMemory(self, memory: torch.Tensor) -> torch.Tensor:
         placeActivation = self.place_projector(memory)

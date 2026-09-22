@@ -17,7 +17,7 @@ class MazeEnv(gym.Env):
         self._goalLocation = [self._actualMazeSize // 2, self._actualMazeSize // 2]
         self._fixedGoal = bool(self._goalLocation)
         self._startLocation = config.get("start", None)
-        self._maxSteps = config["maxSteps"]
+        self._maxSteps = config.get("maxSteps", 200)
         self._actionTaken = 4
         self._debugging = config.get("debugging", None)
         self._mazeTracker = []

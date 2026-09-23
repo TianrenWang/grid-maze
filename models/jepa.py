@@ -6,12 +6,12 @@ from .simple_conv import SimpleConv
 
 
 class Encoder(nn.Module):
-    def __init__(self, inputSize: int, latentSize: int):
+    def __init__(self, inputSize: int, intermediateSize: int, latentSize: int):
         super().__init__()
-        self.visionEncoder = SimpleConv(latentSize)
+        self.visionEncoder = SimpleConv(intermediateSize)
         visionEncoderOutSize = ((inputSize + 1) // 2 + 1) // 2
         self.encoder = nn.Linear(
-            visionEncoderOutSize**2 * latentSize * 2,
+            visionEncoderOutSize**2 * intermediateSize * 2,
             latentSize,
         )
 
@@ -23,9 +23,11 @@ class Encoder(nn.Module):
 class JEPA(nn.Module):
     def __init__(self, inputSize: int, latentSize: int, actionSize: int):
         super().__init__()
-        self.encoder = Encoder(inputSize, latentSize)
-        self.memory = nn.GRU(actionSize, latentSize, batch_first=True)
-        self.predictor = nn.Linear(latentSize, latentSize)
+        intermediateLatentSize = 32
+        self.encoder = Encoder(inputSize, intermediateLatentSize, latentSize)
+        self.memoryInitializer = nn.Linear(latentSize, intermediateLatentSize)
+        self.memory = nn.GRU(actionSize, intermediateLatentSize, batch_first=True)
+        self.predictor = nn.Linear(intermediateLatentSize, latentSize)
         self.EMAEncoder = EMA(
             self.encoder,
             beta=0.9999,
@@ -42,7 +44,9 @@ class JEPA(nn.Module):
 
     def forward_train(self, vision: torch.Tensor, action: torch.Tensor):
         contextLatent = self._getContext(vision)
-        memory, _ = self.memory(action, contextLatent.unsqueeze(0))
+        memory, _ = self.memory(
+            action, self.memoryInitializer(contextLatent).unsqueeze(0)
+        )
         predictedLatent = self.predictor(memory)
         targetLatent = self.EMAEncoder(vision).detach()
         predictionLoss = torch.mean((predictedLatent - targetLatent) ** 2, dim=-1)

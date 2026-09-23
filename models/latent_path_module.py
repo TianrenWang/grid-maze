@@ -55,12 +55,12 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         self.pathIntegrator = nn.LSTM(
             MANIFOLD_DIM, self.integratorSize, batch_first=True
         )
-        self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
+        self.jepa = JEPA(self.inputSize, MANIFOLD_DIM, int(self.action_space.n) + 1)
         self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
         self.manifoldCoordinateReadout = nn.Sequential(
-            nn.Linear(self.hiddenSize, self.hiddenSize),
+            nn.Linear(MANIFOLD_DIM, MANIFOLD_DIM),
             nn.ReLU(),
-            nn.Linear(self.hiddenSize, 2),
+            nn.Linear(MANIFOLD_DIM, MANIFOLD_DIM),
             nn.Sigmoid(),
         )
         self.directionDecoder = nn.Sequential(

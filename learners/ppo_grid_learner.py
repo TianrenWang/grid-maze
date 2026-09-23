@@ -88,36 +88,39 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             )
             return jepaLoss + coordinateLoss
         elif "manifoldCoordinate" in fwd_out:
-            speed = module.speed
             jepaLatents = fwd_out["jepaLatent"][lossMask]
             manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
             normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
             similarity = normalizedLatents @ normalizedLatents.T
             distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
-            relevanceMask = torch.triu(
+            deduplicationMask = torch.triu(
                 torch.ones_like(similarity, dtype=torch.bool), diagonal=1
             )
-            dissimilarMask = torch.triu(similarity <= 0.999, diagonal=1)
-            dissimilarDistances = distances[dissimilarMask]
-            similarity = similarity[relevanceMask]
-            distances = distances[relevanceMask]
+            similarity = similarity[deduplicationMask]
+            distances = distances[deduplicationMask]
             similarityPrediction = module.similarityPredictor(distances.reshape(-1, 1))
-            targetSimilarity = (similarity > 0.99).float()
-
-            distanceLoss = torch.mean(
-                torch.relu((speed - dissimilarDistances) / speed) ** 2
-            )
-            coherenceLoss = torch.nn.functional.binary_cross_entropy(
+            targetSimilarity = (similarity > 0.95).float()
+            negativeSampleLoss = torch.nn.functional.binary_cross_entropy(
                 similarityPrediction.flatten(), targetSimilarity
             )
-            coherenceLoss += distanceLoss
+
+            movements = torch.diff(fwd_out["manifoldCoordinate"], dim=1)[
+                lossMask[:, 1:]
+            ]
+            distances = torch.linalg.norm(movements, dim=-1)
+            distanceLoss = torch.mean(((distances - module.speed) / module.speed) ** 2)
 
             self.metrics.log_value(
-                key=(module_id, "coherence_loss"),
-                value=coherenceLoss.cpu().detach().numpy(),
+                key=(module_id, "negative_sample_loss"),
+                value=negativeSampleLoss.cpu().detach().numpy(),
                 window=100,
             )
-            return coherenceLoss
+            self.metrics.log_value(
+                key=(module_id, "distance_loss"),
+                value=distanceLoss.cpu().detach().numpy(),
+                window=100,
+            )
+            return negativeSampleLoss + distanceLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

@@ -10,9 +10,12 @@ class Encoder(nn.Module):
         super().__init__()
         self.visionEncoder = SimpleConv(intermediateSize)
         visionEncoderOutSize = ((inputSize + 1) // 2 + 1) // 2
-        self.encoder = nn.Linear(
-            visionEncoderOutSize**2 * intermediateSize * 2,
-            latentSize,
+        self.encoder = nn.Sequential(
+            nn.Linear(
+                visionEncoderOutSize**2 * intermediateSize * 2,
+                latentSize,
+            ),
+            nn.Sigmoid(),
         )
 
     def forward(self, vision: torch.Tensor) -> torch.Tensor:
@@ -27,7 +30,9 @@ class JEPA(nn.Module):
         self.encoder = Encoder(inputSize, intermediateLatentSize, latentSize)
         self.memoryInitializer = nn.Linear(latentSize, intermediateLatentSize)
         self.memory = nn.GRU(actionSize, intermediateLatentSize, batch_first=True)
-        self.predictor = nn.Linear(intermediateLatentSize, latentSize)
+        self.predictor = nn.Sequential(
+            nn.Linear(intermediateLatentSize, latentSize), nn.Sigmoid()
+        )
         self.EMAEncoder = EMA(
             self.encoder,
             beta=0.9999,

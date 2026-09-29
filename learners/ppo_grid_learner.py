@@ -22,6 +22,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     ):
         module = self.module[module_id]
         lossMask = batch["loss_mask"]
+        _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
+        coordinates = coordinates[lossMask]
+
         if config.learner_config_dict.get("self_localize"):
             loss = 0
             if "placeLogit" in fwd_out and "placeTarget" in fwd_out:
@@ -77,8 +80,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=jepaLoss.cpu().detach().numpy(),
                 window=100,
             )
-            _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
-            coordinates = coordinates[lossMask]
             predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
             coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
             self.metrics.log_value(
@@ -87,40 +88,22 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 window=100,
             )
             return jepaLoss + coordinateLoss
-        elif "manifoldCoordinate" in fwd_out:
-            jepaLatents = fwd_out["jepaLatent"][lossMask]
-            manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
-            normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
-            similarity = normalizedLatents @ normalizedLatents.T
-            distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
-            deduplicationMask = torch.triu(
-                torch.ones_like(similarity, dtype=torch.bool), diagonal=1
-            )
-            similarity = similarity[deduplicationMask]
-            distances = distances[deduplicationMask]
-            similarityPrediction = module.similarityPredictor(distances.reshape(-1, 1))
-            targetSimilarity = (similarity > 0.95).float()
-            negativeSampleLoss = torch.nn.functional.binary_cross_entropy(
-                similarityPrediction.flatten(), targetSimilarity
-            )
-
-            movements = torch.diff(fwd_out["manifoldCoordinate"], dim=1)[
-                lossMask[:, 1:]
-            ]
-            distances = torch.linalg.norm(movements, dim=-1)
-            distanceLoss = torch.mean(((distances - module.speed) / module.speed) ** 2)
-
+        elif "manifoldLoss" in fwd_out:
+            manifoldLoss = fwd_out["manifoldLoss"][lossMask].mean()
             self.metrics.log_value(
-                key=(module_id, "negative_sample_loss"),
-                value=negativeSampleLoss.cpu().detach().numpy(),
+                key=(module_id, "manifoldLoss"),
+                value=manifoldLoss.cpu().detach().numpy(),
                 window=100,
             )
+
+            predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
+            coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
             self.metrics.log_value(
-                key=(module_id, "distance_loss"),
-                value=distanceLoss.cpu().detach().numpy(),
+                key=(module_id, "coordinate_loss"),
+                value=coordinateLoss.cpu().detach().numpy(),
                 window=100,
             )
-            return negativeSampleLoss + distanceLoss
+            return manifoldLoss + coordinateLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,
@@ -133,8 +116,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     def apply_gradients(self, gradients_dict: dict[str, Any]) -> None:
         super().apply_gradients(gradients_dict)
         module = self.module[DEFAULT_MODULE_ID]
-        if (
-            type(module) is models.LatentPathModule
-            and module.trainingPhase == "learnJEPA"
-        ):
-            module.jepa.EMAEncoder.update()
+        if type(module) is models.LatentPathModule:
+            if module.trainingPhase == "learnJEPA":
+                module.jepa.EMAEncoder.update()
+            elif module.trainingPhase == "learnManifold":
+                module.manifoldProjector.EMAProjector.update()

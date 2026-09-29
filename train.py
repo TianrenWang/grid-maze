@@ -185,12 +185,10 @@ if __name__ == "__main__":
                         print("Coordinate Loss:", coordinateLoss)
 
                     if args.learnManifold:
-                        negativeSampleLoss = np.round(
-                            trainingOutputs["negative_sample_loss"], 2
-                        )
-                        print("Negative Sampling Loss:", negativeSampleLoss)
-                        distanceLoss = np.round(trainingOutputs["distance_loss"], 2)
-                        print("Distance Loss:", distanceLoss)
+                        manifoldLoss = np.round(trainingOutputs["manifoldLoss"], 2)
+                        print("Manifold Loss:", manifoldLoss)
+                        coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
+                        print("Coordinate Loss:", coordinateLoss)
                 else:
                     averageReturn = 0
                     averageSteps = 0

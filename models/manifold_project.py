@@ -50,7 +50,7 @@ class ManifoldProjector(nn.Module):
         )
         trueCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(displacement, dim=1)
         predictedCoordinates = self.manifoldProjector(
-            torch.nn.functional.normalize(latent), dim=-1
+            torch.nn.functional.normalize(latent, dim=-1)
         )
         return torch.mean(
             torch.abs(trueCoordinates - predictedCoordinates), dim=-1

@@ -38,7 +38,9 @@ class ManifoldProjector(nn.Module):
         return self.EMAProjector(latent)
 
     def forward_train(self, latent: torch.Tensor, action: torch.Tensor):
-        startingPlace = self.EMAProjector(latent[:, 0])
+        startingPlace = self.EMAProjector(
+            torch.nn.functional.normalize(latent[:, 0], dim=-1)
+        )
         displacement = self._getDisplacement(action)
         firstDisplacement = displacement[:, 0, :]
         displacement[:, 0, :] = torch.zeros(
@@ -47,7 +49,9 @@ class ManifoldProjector(nn.Module):
             device=firstDisplacement.device,
         )
         trueCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(displacement, dim=1)
-        predictedCoordinates = self.manifoldProjector(latent)
+        predictedCoordinates = self.manifoldProjector(
+            torch.nn.functional.normalize(latent), dim=-1
+        )
         return torch.mean(
             torch.abs(trueCoordinates - predictedCoordinates), dim=-1
         ), self.manifoldCoordinateReadout(self.EMAProjector(latent))

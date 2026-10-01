@@ -10,8 +10,7 @@ class ManifoldProjector(nn.Module):
         super().__init__()
         self.manifoldProjector = nn.Sequential(
             nn.Linear(latentSize, latentSize),
-            nn.Tanh(),
-            nn.Dropout(),
+            nn.ReLU(),
             nn.Linear(latentSize, manifoldDim),
             nn.Sigmoid(),
         )
@@ -28,9 +27,7 @@ class ManifoldProjector(nn.Module):
             update_every=10,
             min_value=0.9999,
         )
-        self.directionDecoder = nn.Sequential(
-            nn.Linear(latentSize + actionSize, 1), nn.Tanh()
-        )
+        self.directionDecoder = nn.Sequential(nn.Linear(actionSize, 1), nn.Tanh())
         self.speed = 1 / 31
 
     def _getDisplacement(self, latent: torch.Tensor) -> torch.Tensor:
@@ -41,17 +38,16 @@ class ManifoldProjector(nn.Module):
         return self.EMAProjector(latent)
 
     def forward_train(self, latent: torch.Tensor, action: torch.Tensor):
-        startingPlace = self.manifoldProjector(latent[:, 0])
-        displacement = self._getDisplacement(torch.concat([latent, action], dim=-1))
+        startingPlace = self.EMAProjector(latent[:, 0])
+        displacement = self._getDisplacement(action)
         firstDisplacement = displacement[:, 0, :]
         displacement[:, 0, :] = torch.zeros(
             firstDisplacement.shape,
             dtype=torch.float32,
             device=firstDisplacement.device,
         )
-        predictedCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
-            displacement, dim=1
-        )
+        trueCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(displacement, dim=1)
+        predictedCoordinates = self.manifoldProjector(latent)
         return torch.mean(
-            torch.abs(predictedCoordinates - self.EMAProjector(latent)), dim=-1
-        ), self.manifoldCoordinateReadout(predictedCoordinates)
+            torch.abs(trueCoordinates - predictedCoordinates), dim=-1
+        ), self.manifoldCoordinateReadout(self.EMAProjector(latent))

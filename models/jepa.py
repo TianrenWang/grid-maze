@@ -44,7 +44,6 @@ class JEPA(nn.Module):
         contextLatent = self._getContext(vision)
         memory, _ = self.memory(action, contextLatent.unsqueeze(0))
         predictedLatent = self.predictor(memory)
-        targetLatent = self.EMAEncoder(vision).detach()
+        targetLatent = self.EMAEncoder(vision)
         predictionLoss = torch.mean((predictedLatent - targetLatent) ** 2, dim=-1)
-
-        return memory, predictionLoss, targetLatent
+        return memory, predictionLoss

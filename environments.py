@@ -62,6 +62,10 @@ class MazeEnv(gym.Env):
         if self._randomMaze:
             self._mazeArray = generateMaze(self._actualMazeSize)
 
+        self._map = np.array(self._mazeArray)
+        self._cleanMap = self._map.copy()
+        self._cleanMap[self._cleanMap == 0.2] = 0
+
         if not self._startLocation:
             allLocations = []
             shiftAmount = self._actualMazeSize // 2 - self._mazeSize // 2
@@ -71,14 +75,21 @@ class MazeEnv(gym.Env):
                     allLocations.append((i, j))
             np.random.shuffle(allLocations)
             agentLocation = np.array(allLocations.pop())
-            goalDiff = np.abs(agentLocation - self._goalLocation)
-            isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6 and self._eval
+
+            def isCloseToGoal():
+                return (
+                    self._cleanMap[
+                        agentLocation[0] - 4 : agentLocation[0] + 5,
+                        agentLocation[1] - 4 : agentLocation[1] + 5,
+                        :,
+                    ].sum()
+                    == 0
+                )
+
             while len(allLocations) and (
-                np.array_equal(agentLocation, self._goalLocation) or isCloseToGoal
+                np.array_equal(agentLocation, self._goalLocation) or isCloseToGoal()
             ):
                 agentLocation = np.array(allLocations.pop())
-                goalDiff = np.abs(agentLocation - self._goalLocation)
-                isCloseToGoal = goalDiff[0] <= 6 and goalDiff[1] <= 6
             self._agentLocation = agentLocation
         else:
             self._agentLocation = np.array(self._startLocation, dtype=np.int32)
@@ -93,7 +104,6 @@ class MazeEnv(gym.Env):
         self._mazeTracker[self._goalLocation[0]][self._goalLocation[1]] = "*"
 
         self._pastLocation = self._agentLocation
-        self._map = np.array(self._mazeArray)
         self._episode_len = 0
         self.previousActions = deque()
         self._visitCounts = [

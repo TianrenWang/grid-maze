@@ -110,11 +110,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         if self.trainingPhase == LEARN_JEPA or self.trainingPhase == LEARN_MANIFOLD:
             if self.trainingPhase == LEARN_JEPA:
-                jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
-                    vision,
-                    action,
+                jepaMemory, jepaLoss = self.jepa.forward_train(vision, action)
+                output.coordinateReadout = self.manifoldCoordinateReadout(
+                    jepaMemory.detach()
                 )
-                output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
                 output.jepaMemory = jepaMemory
                 output.jepaLoss = jepaLoss
             else:

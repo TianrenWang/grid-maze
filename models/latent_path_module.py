@@ -1,4 +1,3 @@
-import math
 from dataclasses import dataclass
 
 import torch
@@ -12,19 +11,8 @@ torch.set_printoptions(precision=2)
 
 from .agent_models import PathIntegrationWithVisionModule
 from .jepa import JEPA
+from .manifold_project import ManifoldProjector
 from .utils import calculatePlace
-
-
-class ManifoldProjector(nn.Module):
-    def __init__(self, inputSize: int, latentSize: int):
-        super().__init__()
-        self.encoder = nn.Sequential(nn.Linear(inputSize, latentSize), nn.Sigmoid())
-        self.decoder = nn.Sequential(nn.Linear(latentSize, inputSize), nn.Tanh())
-
-    def forward(self, latent: torch.Tensor):
-        projection = self.encoder(latent)
-        reconstructed = self.decoder(projection)
-        return projection, reconstructed
 
 
 @dataclass
@@ -56,21 +44,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             MANIFOLD_DIM, self.integratorSize, batch_first=True
         )
         self.jepa = JEPA(self.inputSize, self.hiddenSize, int(self.action_space.n) + 1)
-        self.placeEncoderForJEPA = nn.Linear(self.numPlaceCells, self.hiddenSize)
-        self.manifoldCoordinateReadout = nn.Sequential(
-            nn.Linear(self.hiddenSize, self.hiddenSize),
-            nn.ReLU(),
-            nn.Linear(self.hiddenSize, 2),
-            nn.Sigmoid(),
+        self.manifoldProjector = ManifoldProjector(
+            self.hiddenSize, int(self.action_space.n) + 1, MANIFOLD_DIM
         )
-        self.directionDecoder = nn.Sequential(
-            nn.Linear(self.hiddenSize + self.action_space.n + 1, 1), nn.Tanh()
-        )
-        self.speed = 1 / 31
-        self.place_projector = nn.Sequential(
-            nn.Linear(self.hiddenSize, self.numPlaceCells), nn.Softmax(dim=-1)
-        )
-        self.similarityPredictor = nn.Sequential(nn.Linear(1, 1), nn.Sigmoid())
 
         if self.model_config.get(LEARN_JEPA, False):
             self.trainingPhase = LEARN_JEPA
@@ -92,10 +68,6 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             "jepaMemory": torch.zeros((self.hiddenSize,), dtype=torch.float32),
         }
 
-    def _getDisplacement(self, latent: torch.Tensor) -> torch.Tensor:
-        angle = self.directionDecoder(latent) * math.pi
-        return torch.cat([torch.cos(angle), torch.sin(angle)], dim=-1) * self.speed
-
     def _getPlaceActivationFromMemory(self, memory: torch.Tensor) -> torch.Tensor:
         placeActivation = self.place_projector(memory)
         return calculatePlace(
@@ -110,19 +82,21 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         if self.trainingPhase == LEARN_JEPA or self.trainingPhase == LEARN_MANIFOLD:
             if self.trainingPhase == LEARN_JEPA:
-                jepaMemory, jepaLoss, encodedLatent = self.jepa.forward_train(
+                jepaMemory, jepaLoss, coordinateReadout = self.jepa.forward_train(
                     vision,
                     action,
                 )
-                output.coordinateReadout = self.manifoldCoordinateReadout(encodedLatent)
+                output.coordinateReadout = coordinateReadout
                 output.jepaMemory = jepaMemory
                 output.jepaLoss = jepaLoss
             else:
                 jepaLatent = self.jepa.forward(vision)
-                output.manifoldCoordinate = (
-                    self.place_projector(jepaLatent) @ self.placeCells
+                manifoldCoordinate, coordinateReadout = (
+                    self.manifoldProjector.forward_train(jepaLatent, action)
                 )
                 output.jepaLatent = jepaLatent
+                output.coordinateReadout = coordinateReadout
+                output.manifoldCoordinate = manifoldCoordinate
 
             obs = batch["obs"]
             output.policy = torch.ones(
@@ -188,6 +162,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
 
         if controlOutputs.manifoldCoordinate is not None:
             finalOutput["manifoldCoordinate"] = controlOutputs.manifoldCoordinate
+
+        if controlOutputs.jepaLatent is not None:
             finalOutput["jepaLatent"] = controlOutputs.jepaLatent
 
         return finalOutput

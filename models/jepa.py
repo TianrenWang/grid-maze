@@ -25,13 +25,19 @@ class JEPA(nn.Module):
         super().__init__()
         self.encoder = Encoder(inputSize, latentSize)
         self.memory = nn.GRU(actionSize, latentSize, batch_first=True)
-        self.predictor = nn.Linear(latentSize, latentSize)
+        self.predictor = nn.Sequential(nn.Dropout(), nn.Linear(latentSize, latentSize))
         self.EMAEncoder = EMA(
             self.encoder,
             beta=0.9999,
             update_after_step=0,
             update_every=10,
             min_value=0.9999,
+        )
+        self.manifoldCoordinateReadout = nn.Sequential(
+            nn.Linear(latentSize, latentSize),
+            nn.ReLU(),
+            nn.Linear(latentSize, 2),
+            nn.Sigmoid(),
         )
 
     def _getContext(self, vision: torch.Tensor):
@@ -47,4 +53,4 @@ class JEPA(nn.Module):
         targetLatent = self.EMAEncoder(vision).detach()
         predictionLoss = torch.mean((predictedLatent - targetLatent) ** 2, dim=-1)
 
-        return memory, predictionLoss, targetLatent
+        return memory, predictionLoss, self.manifoldCoordinateReadout(targetLatent)

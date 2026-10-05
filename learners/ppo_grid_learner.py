@@ -22,6 +22,9 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     ):
         module = self.module[module_id]
         lossMask = batch["loss_mask"]
+        _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
+        coordinates = coordinates[lossMask]
+
         if config.learner_config_dict.get("self_localize"):
             loss = 0
             if "placeLogit" in fwd_out and "placeTarget" in fwd_out:
@@ -77,8 +80,6 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=jepaLoss.cpu().detach().numpy(),
                 window=100,
             )
-            _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
-            coordinates = coordinates[lossMask]
             predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
             coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
             self.metrics.log_value(
@@ -98,29 +99,23 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             )
             similarity = similarity[deduplicationMask]
             distances = distances[deduplicationMask]
-            similarityPrediction = module.similarityPredictor(distances.reshape(-1, 1))
-            targetSimilarity = (similarity > 0.95).float()
-            negativeSampleLoss = torch.nn.functional.binary_cross_entropy(
-                similarityPrediction.flatten(), targetSimilarity
-            )
-
-            movements = torch.diff(fwd_out["manifoldCoordinate"], dim=1)[
-                lossMask[:, 1:]
-            ]
-            distances = torch.linalg.norm(movements, dim=-1)
-            distanceLoss = torch.mean(((distances - module.speed) / module.speed) ** 2)
-
+            sameObsMask = similarity > 0.999
+            distances = distances[sameObsMask]
+            coherenceLoss = distances.mean()
             self.metrics.log_value(
-                key=(module_id, "negative_sample_loss"),
-                value=negativeSampleLoss.cpu().detach().numpy(),
+                key=(module_id, "coherenceLoss"),
+                value=coherenceLoss.cpu().detach().numpy(),
                 window=100,
             )
+
+            predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
+            coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
             self.metrics.log_value(
-                key=(module_id, "distance_loss"),
-                value=distanceLoss.cpu().detach().numpy(),
+                key=(module_id, "coordinateLoss"),
+                value=coordinateLoss.cpu().detach().numpy(),
                 window=100,
             )
-            return negativeSampleLoss + distanceLoss
+            return coherenceLoss + coordinateLoss
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

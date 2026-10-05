@@ -198,6 +198,7 @@ class PlaceMazeEnv(FoggedMazeEnv):
         )
         self._forcedGoal = None
         self._perturb = config.get("perturb", False)
+        self._forcedGoalReached = False
 
     def getRandomGoal(self, distance: int):
         while True:
@@ -227,24 +228,29 @@ class PlaceMazeEnv(FoggedMazeEnv):
             np.random.shuffle(possibleStarts)
             self._startLocation = possibleStarts.pop()
             self._forcedGoal = self.getRandomGoal(10)
+        self._forcedGoalReached = False
         super().reset(seed=seed, options=options)
         self._lastLocation = self._agentLocation
         return self._getObs(), self._get_info()
 
     def step(self, action):
-        if self._perturb and self._episode_len < 10:
-            diff = self._forcedGoal - self._agentLocation
-            flip = random.random()
-            if flip > 0.5 and abs(diff[0]) > 0 or abs(diff[1]) == 0:
-                if diff[0] > 0:
-                    action = 0
-                else:
-                    action = 2
-            elif flip <= 0.5 and abs(diff[1]) > 0 or abs(diff[0]) == 0:
-                if diff[1] > 0:
-                    action = 1
-                else:
-                    action = 3
+        if self._forcedGoal and not self._forcedGoalReached:
+            if np.array_equal(self._forcedGoal, self._agentLocation):
+                self._forcedGoalReached = True
+
+            if not self._forcedGoalReached:
+                diff = self._forcedGoal - self._agentLocation
+                flip = random.random()
+                if flip > 0.5 and abs(diff[0]) > 0 or abs(diff[1]) == 0:
+                    if diff[0] > 0:
+                        action = 0
+                    else:
+                        action = 2
+                elif flip <= 0.5 and abs(diff[1]) > 0 or abs(diff[0]) == 0:
+                    if diff[1] > 0:
+                        action = 1
+                    else:
+                        action = 3
 
         self._lastLocation = self._agentLocation
         return super().step(action)
@@ -327,3 +333,10 @@ class SmoothExplorationEnv(PlaceMazeEnv):
         if len(self.previousActions) > 3:
             self.previousActions.popleft()
         return super().step(best_action)
+
+
+class NaivePolicySimulationEnv(PlaceMazeEnv):
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        super().reset(seed=seed)
+        self._forcedGoal = self._goalLocation
+        return self._getObs(), self._get_info()

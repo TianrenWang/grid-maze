@@ -14,7 +14,12 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 import models
-from environments import MazeEnv, PlaceMazeEnv, SmoothExplorationEnv
+from environments import (
+    MazeEnv,
+    NaivePolicySimulationEnv,
+    PlaceMazeEnv,
+    SmoothExplorationEnv,
+)
 from learners.ppo_grid_learner import PPOTorchLearnerWithSelfPredLoss
 from maze import generateMaze, getMazeDebugString
 
@@ -89,8 +94,10 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize or args.learnManifold or args.learnJEPA:
+    if args.selfLocalize or args.learnJEPA:
         env = SmoothExplorationEnv
+    elif args.learnManifold:
+        env = NaivePolicySimulationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:

@@ -25,7 +25,7 @@ class JEPA(nn.Module):
         super().__init__()
         self.encoder = Encoder(inputSize, latentSize)
         self.memory = nn.GRU(actionSize, latentSize, batch_first=True)
-        self.predictor = nn.Linear(latentSize, latentSize)
+        self.predictor = nn.Sequential(nn.Dropout(), nn.Linear(latentSize, latentSize))
         self.EMAEncoder = EMA(
             self.encoder,
             beta=0.9999,

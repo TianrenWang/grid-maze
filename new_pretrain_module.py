@@ -1,6 +1,8 @@
 import argparse
 import os
+import pickle
 
+import torch
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
@@ -56,8 +58,14 @@ if __name__ == "__main__":
         agent.save(targetPath)
 
     targetModule: models.LatentPathModule = RLModule.from_checkpoint(targetModulePath)
-    sourceModule: models.LatentPathModule = RLModule.from_checkpoint(sourceModulePath)
-    targetModule.jepa.EMAEncoder.ema_model.load_state_dict(
-        sourceModule.jepa.EMAEncoder.ema_model.state_dict()
-    )
+
+    with open(os.path.join(sourceModulePath, "module_state.pkl"), "rb") as f:
+        sourceState = pickle.load(f)
+
+    emaState = {
+        k.removeprefix("jepa.EMAEncoder.ema_model."): torch.as_tensor(v)
+        for k, v in sourceState.items()
+        if k.startswith("jepa.EMAEncoder.ema_model.")
+    }
+    targetModule.jepa.EMAEncoder.ema_model.load_state_dict(emaState)
     targetModule.save_to_path(targetModulePath)

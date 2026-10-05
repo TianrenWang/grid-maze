@@ -194,7 +194,7 @@ if __name__ == "__main__":
                     if args.learnManifold:
                         coherenceLoss = np.round(trainingOutputs["coherenceLoss"], 2)
                         print("Coherence Loss:", coherenceLoss)
-                        coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
+                        coordinateLoss = np.round(trainingOutputs["coordinateLoss"], 2)
                         print("Coordinate Loss:", coordinateLoss)
                 else:
                     averageReturn = 0

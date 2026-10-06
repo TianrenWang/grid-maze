@@ -192,8 +192,14 @@ if __name__ == "__main__":
                         print("Coordinate Loss:", coordinateLoss)
 
                     if args.learnManifold:
-                        coherenceLoss = np.round(trainingOutputs["coherenceLoss"], 2)
-                        print("Coherence Loss:", coherenceLoss)
+                        sameObsCoherenceLoss = np.round(
+                            trainingOutputs["sameObsCoherenceLoss"], 5
+                        )
+                        print("Same Loss:", sameObsCoherenceLoss)
+                        diffObsCoherenceLoss = np.round(
+                            trainingOutputs["diffObsCoherenceLoss"], 5
+                        )
+                        print("Diff Loss:", diffObsCoherenceLoss)
                         coordinateLoss = np.round(trainingOutputs["coordinateLoss"], 2)
                         print("Coordinate Loss:", coordinateLoss)
                 else:

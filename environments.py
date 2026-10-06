@@ -335,8 +335,23 @@ class SmoothExplorationEnv(PlaceMazeEnv):
         return super().step(best_action)
 
 
-class NaivePolicySimulationEnv(PlaceMazeEnv):
-    def reset(self, *, seed: int | None = None, options: dict | None = None):
-        super().reset(seed=seed)
-        self._forcedGoal = self._goalLocation
-        return self._getObs(), self._get_info()
+class JitteryExplorationEnv(PlaceMazeEnv):
+    def step(self, action):
+        """
+        Produces random action that never stops and doesn't venture beyond the primary
+        training region.
+        """
+        availableActions = [0, 1, 2, 3]
+        np.random.shuffle(availableActions)
+
+        shiftAmount = (self._actualMazeSize - self._mazeSize) // 2
+
+        for a in availableActions:
+            direction = self._action_to_direction[a]
+            newLoc = self._agentLocation + direction
+            if (
+                self.isValidLocation(newLoc)
+                and shiftAmount <= newLoc[0] <= shiftAmount + self._mazeSize
+                and shiftAmount <= newLoc[1] <= shiftAmount + self._mazeSize
+            ):
+                return super().step(a)

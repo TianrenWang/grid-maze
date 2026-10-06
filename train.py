@@ -15,8 +15,8 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
 import models
 from environments import (
+    JitteryExplorationEnv,
     MazeEnv,
-    NaivePolicySimulationEnv,
     PlaceMazeEnv,
     SmoothExplorationEnv,
 )
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     if args.selfLocalize or args.learnJEPA:
         env = SmoothExplorationEnv
     elif args.learnManifold:
-        env = NaivePolicySimulationEnv
+        env = JitteryExplorationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
     else:

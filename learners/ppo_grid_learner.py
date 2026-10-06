@@ -100,8 +100,16 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             similarity = similarity[deduplicationMask]
             distances = distances[deduplicationMask]
             sameObsMask = similarity > 0.999
-            distances = distances[sameObsMask]
-            coherenceLoss = distances.mean()
+            diffObsMask = (similarity < 0.999) & (
+                distances < module.manifoldProjector.speed
+            )
+            distancesOfSameObs = distances[sameObsMask]
+            distancesOfDiffObs = distances[diffObsMask]
+            negativeSampleLoss = (
+                torch.relu(module.manifoldProjector.speed - distancesOfDiffObs)
+                / module.manifoldProjector.speed
+            )
+            coherenceLoss = distancesOfSameObs.mean() + negativeSampleLoss.mean()
             self.metrics.log_value(
                 key=(module_id, "coherenceLoss"),
                 value=coherenceLoss.cpu().detach().numpy(),

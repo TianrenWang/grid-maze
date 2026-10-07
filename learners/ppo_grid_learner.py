@@ -88,38 +88,39 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 window=100,
             )
             return jepaLoss + coordinateLoss
-        elif "manifoldCoordinate" in fwd_out:
+        elif module.trainingPhase == "learnManifold":
             jepaLatents = fwd_out["jepaLatent"][lossMask]
-            manifoldCoordinates = fwd_out["manifoldCoordinate"][lossMask]
+            calculatedCoordinates = fwd_out["calculatedManifold"][lossMask]
+            projectedManifold = fwd_out["projectedManifold"][lossMask]
             normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
             similarity = normalizedLatents @ normalizedLatents.T
-            distances = torch.cdist(manifoldCoordinates, manifoldCoordinates)
+            distances = torch.cdist(calculatedCoordinates, calculatedCoordinates)
             deduplicationMask = torch.triu(
                 torch.ones_like(similarity, dtype=torch.bool), diagonal=1
             )
             similarity = similarity[deduplicationMask]
             distances = distances[deduplicationMask]
             sameObsMask = similarity > 0.999
-            diffObsMask = (similarity < 0.999) & (
-                distances < module.manifoldProjector.speed
-            )
-            distancesOfSameObs = distances[sameObsMask].mean()
+            diffObsMask = similarity < 0.999
+            distancesOfSameObs = distances[sameObsMask]
             distancesOfDiffObs = distances[diffObsMask]
-            distancesOfDiffObs = distancesOfDiffObs[
-                torch.randperm(len(distancesOfDiffObs))[:150]
-            ]
-            negativeSampleLoss = (
-                torch.relu(module.manifoldProjector.speed - distancesOfDiffObs)
-                / module.manifoldProjector.speed
-            ).mean()
+            negativeSampleLoss = torch.exp(-distancesOfDiffObs * 50)
+            projectionError = torch.abs(
+                projectedManifold - calculatedCoordinates.detach()
+            )
             self.metrics.log_value(
                 key=(module_id, "sameObsCoherenceLoss"),
-                value=distancesOfSameObs.cpu().detach().numpy(),
+                value=distancesOfSameObs.mean().cpu().detach().numpy(),
                 window=100,
             )
             self.metrics.log_value(
                 key=(module_id, "diffObsCoherenceLoss"),
-                value=negativeSampleLoss.cpu().detach().numpy(),
+                value=negativeSampleLoss.sum().cpu().detach().numpy(),
+                window=100,
+            )
+            self.metrics.log_value(
+                key=(module_id, "projectionError"),
+                value=projectionError.mean().cpu().detach().numpy(),
                 window=100,
             )
 
@@ -130,7 +131,12 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=coordinateLoss.cpu().detach().numpy(),
                 window=100,
             )
-            return distancesOfSameObs + negativeSampleLoss + coordinateLoss
+            return (
+                (distancesOfSameObs**2).mean()
+                + negativeSampleLoss.mean()
+                + coordinateLoss
+                + (projectionError**2).mean()
+            )
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,
@@ -143,8 +149,8 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
     def apply_gradients(self, gradients_dict: dict[str, Any]) -> None:
         super().apply_gradients(gradients_dict)
         module = self.module[DEFAULT_MODULE_ID]
-        if (
-            type(module) is models.LatentPathModule
-            and module.trainingPhase == "learnJEPA"
-        ):
-            module.jepa.EMAEncoder.update()
+        if type(module) is models.LatentPathModule:
+            if module.trainingPhase == "learnJEPA":
+                module.jepa.EMAEncoder.update()
+            elif module.trainingPhase == "learnManifold":
+                module.manifoldProjector.EMAProjector.update()

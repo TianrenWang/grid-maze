@@ -12,7 +12,6 @@ class ManifoldProjector(nn.Module):
             nn.Linear(latentSize, latentSize),
             nn.ReLU(),
             nn.Linear(latentSize, manifoldDim),
-            nn.Sigmoid(),
         )
         self.manifoldCoordinateReadout = nn.Sequential(
             nn.Linear(manifoldDim, manifoldDim),
@@ -46,9 +45,12 @@ class ManifoldProjector(nn.Module):
             dtype=torch.float32,
             device=firstDisplacement.device,
         )
-        predictedCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
+        targetCoordinates = startingPlace.unsqueeze(1) + torch.cumsum(
             displacement, dim=1
         )
-        return predictedCoordinates, self.manifoldCoordinateReadout(
-            predictedCoordinates.detach()
+        predictedCoordinates = self.manifoldProjector(latent)
+        return (
+            predictedCoordinates,
+            targetCoordinates,
+            self.manifoldCoordinateReadout(targetCoordinates.detach()),
         )

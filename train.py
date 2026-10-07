@@ -200,7 +200,11 @@ if __name__ == "__main__":
                             trainingOutputs["diffObsCoherenceLoss"], 5
                         )
                         print("Diff Loss:", diffObsCoherenceLoss)
-                        coordinateLoss = np.round(trainingOutputs["coordinateLoss"], 2)
+                        projectionError = np.round(
+                            trainingOutputs["projectionError"], 5
+                        )
+                        print("Projection Error:", projectionError)
+                        coordinateLoss = np.round(trainingOutputs["coordinateLoss"], 5)
                         print("Coordinate Loss:", coordinateLoss)
                 else:
                     averageReturn = 0

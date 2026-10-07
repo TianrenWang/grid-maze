@@ -26,7 +26,8 @@ class ControlOutputs:
     finalIntegrationState: torch.Tensor | None = None
     jepaLoss: torch.Tensor | None = None
     coordinateReadout: torch.Tensor | None = None
-    manifoldCoordinate: torch.Tensor | None = None
+    projectedManifold: torch.Tensor | None = None
+    calculatedManifold: torch.Tensor | None = None
     jepaLatent: torch.Tensor | None = None
 
 
@@ -91,12 +92,13 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 output.jepaLoss = jepaLoss
             else:
                 jepaLatent = self.jepa.forward(vision)
-                manifoldCoordinate, coordinateReadout = (
+                projectedManifold, calculatedManifold, coordinateReadout = (
                     self.manifoldProjector.forward_train(jepaLatent, action)
                 )
                 output.jepaLatent = jepaLatent
                 output.coordinateReadout = coordinateReadout
-                output.manifoldCoordinate = manifoldCoordinate
+                output.projectedManifold = projectedManifold
+                output.calculatedManifold = calculatedManifold
 
             obs = batch["obs"]
             output.policy = torch.ones(
@@ -160,8 +162,9 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         if controlOutputs.jepaLoss is not None:
             finalOutput["jepaLoss"] = controlOutputs.jepaLoss
 
-        if controlOutputs.manifoldCoordinate is not None:
-            finalOutput["manifoldCoordinate"] = controlOutputs.manifoldCoordinate
+        if controlOutputs.projectedManifold is not None:
+            finalOutput["projectedManifold"] = controlOutputs.projectedManifold
+            finalOutput["calculatedManifold"] = controlOutputs.calculatedManifold
 
         if controlOutputs.jepaLatent is not None:
             finalOutput["jepaLatent"] = controlOutputs.jepaLatent

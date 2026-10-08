@@ -206,6 +206,8 @@ if __name__ == "__main__":
                         print("Projection Error:", projectionError)
                         inconsistency = np.round(trainingOutputs["inconsistency"], 4)
                         print("Inconsistency:", inconsistency)
+                        directionScore = np.round(trainingOutputs["directionScore"], 2)
+                        print("Direction Score:", directionScore)
                 else:
                     averageReturn = 0
                     averageSteps = 0

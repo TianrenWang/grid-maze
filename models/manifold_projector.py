@@ -27,6 +27,31 @@ class ManifoldProjector(nn.Module):
         angle = self.directionDecoder(latent) * math.pi
         return torch.cat([torch.cos(angle), torch.sin(angle)], dim=-1) * self.speed
 
+    def _getCrossScore(self):
+        directions = self._getDisplacement(
+            torch.tensor(
+                [
+                    [1, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0],
+                    [0, 0, 1, 0, 0],
+                    [0, 0, 0, 1, 0],
+                ],
+                dtype=torch.float32,
+            )
+        )
+        directions = directions / (directions.norm(dim=-1, keepdim=True) + 1e-8)
+        theta = torch.atan2(directions[:, 1], directions[:, 0])
+        z = torch.stack(
+            [
+                torch.cos(2 * theta),
+                torch.sin(2 * theta),
+            ],
+            dim=-1,
+        )
+        magnitude = z.sum(dim=-2).norm(dim=-1)
+        score = 1 - magnitude / 4
+        return score
+
     def forward(self, latent: torch.Tensor):
         return self.EMAProjector(latent)
 

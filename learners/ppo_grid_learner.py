@@ -123,6 +123,11 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=projectionError.mean().cpu().detach().numpy(),
                 window=100,
             )
+            self.metrics.log_value(
+                key=(module_id, "directionScore"),
+                value=module.manifoldProjector._getCrossScore().cpu().detach().numpy(),
+                window=100,
+            )
 
             trueDistances = torch.cdist(coordinates, coordinates)[deduplicationMask]
             inconsistency = torch.abs(trueDistances - distances).mean()

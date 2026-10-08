@@ -13,12 +13,6 @@ class ManifoldProjector(nn.Module):
             nn.ReLU(),
             nn.Linear(latentSize, manifoldDim),
         )
-        self.manifoldCoordinateReadout = nn.Sequential(
-            nn.Linear(manifoldDim, manifoldDim),
-            nn.ReLU(),
-            nn.Linear(manifoldDim, manifoldDim),
-            nn.Sigmoid(),
-        )
         self.EMAProjector = EMA(
             self.manifoldProjector,
             beta=0.9999,
@@ -37,7 +31,7 @@ class ManifoldProjector(nn.Module):
         return self.EMAProjector(latent)
 
     def forward_train(self, latent: torch.Tensor, action: torch.Tensor):
-        startingPlace = self.manifoldProjector(latent[:, 0])
+        startingPlace = self.EMAProjector(latent[:, 0])
         displacement = self._getDisplacement(action)
         firstDisplacement = displacement[:, 0, :]
         displacement[:, 0, :] = torch.zeros(
@@ -49,8 +43,4 @@ class ManifoldProjector(nn.Module):
             displacement, dim=1
         )
         predictedCoordinates = self.manifoldProjector(latent)
-        return (
-            predictedCoordinates,
-            targetCoordinates,
-            self.manifoldCoordinateReadout(targetCoordinates.detach()),
-        )
+        return predictedCoordinates, targetCoordinates

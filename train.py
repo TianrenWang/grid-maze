@@ -193,19 +193,19 @@ if __name__ == "__main__":
 
                     if args.learnManifold:
                         sameObsCoherenceLoss = np.round(
-                            trainingOutputs["sameObsCoherenceLoss"], 5
+                            trainingOutputs["sameObsCoherenceLoss"], 4
                         )
                         print("Same Loss:", sameObsCoherenceLoss)
                         diffObsCoherenceLoss = np.round(
-                            trainingOutputs["diffObsCoherenceLoss"], 5
+                            trainingOutputs["diffObsCoherenceLoss"], 4
                         )
                         print("Diff Loss:", diffObsCoherenceLoss)
                         projectionError = np.round(
-                            trainingOutputs["projectionError"], 5
+                            trainingOutputs["projectionError"], 4
                         )
                         print("Projection Error:", projectionError)
-                        coordinateLoss = np.round(trainingOutputs["coordinateLoss"], 5)
-                        print("Coordinate Loss:", coordinateLoss)
+                        inconsistency = np.round(trainingOutputs["inconsistency"], 4)
+                        print("Inconsistency:", inconsistency)
                 else:
                     averageReturn = 0
                     averageSteps = 0

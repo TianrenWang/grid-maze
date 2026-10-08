@@ -125,16 +125,16 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             )
 
             predictedCoordinates: torch.Tensor = fwd_out["coordinateReadout"][lossMask]
-            coordinateLoss = torch.abs(coordinates - predictedCoordinates).mean()
+            trueDistances = torch.cdist(coordinates, coordinates)
+            inconsistency = torch.abs(trueDistances - distances).mean()
             self.metrics.log_value(
-                key=(module_id, "coordinateLoss"),
-                value=coordinateLoss.cpu().detach().numpy(),
+                key=(module_id, "inconsistency"),
+                value=inconsistency.mean().cpu().detach().numpy(),
                 window=100,
             )
             return (
                 (distancesOfSameObs**2).mean()
                 + negativeSampleLoss.mean()
-                + coordinateLoss
                 + (projectionError**2).mean()
             )
         else:

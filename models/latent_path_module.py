@@ -11,7 +11,7 @@ torch.set_printoptions(precision=2)
 
 from .agent_models import PathIntegrationWithVisionModule
 from .jepa import JEPA
-from .manifold_project import ManifoldProjector
+from .manifold_projector import ManifoldProjector
 from .utils import calculatePlace
 
 
@@ -92,11 +92,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 output.jepaLoss = jepaLoss
             else:
                 jepaLatent = self.jepa.forward(vision)
-                projectedManifold, calculatedManifold, coordinateReadout = (
+                projectedManifold, calculatedManifold = (
                     self.manifoldProjector.forward_train(jepaLatent, action)
                 )
                 output.jepaLatent = jepaLatent
-                output.coordinateReadout = coordinateReadout
                 output.projectedManifold = projectedManifold
                 output.calculatedManifold = calculatedManifold
 

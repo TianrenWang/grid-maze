@@ -37,6 +37,7 @@ class ManifoldProjector(nn.Module):
                     [0, 0, 0, 1, 0],
                 ],
                 dtype=torch.float32,
+                device=next(self.manifoldProjector.parameters()).device,
             )
         )
         directions = directions / (directions.norm(dim=-1, keepdim=True) + 1e-8)

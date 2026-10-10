@@ -15,10 +15,10 @@ class ManifoldProjector(nn.Module):
         )
         self.EMAProjector = EMA(
             self.manifoldProjector,
-            beta=0.9999,
+            beta=0.99,
             update_after_step=0,
             update_every=10,
-            min_value=0.9999,
+            min_value=0.99,
         )
         self.directionDecoder = nn.Sequential(nn.Linear(actionSize, 1), nn.Tanh())
         self.speed = 1 / 31

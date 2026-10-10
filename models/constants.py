@@ -1,0 +1,8 @@
+SELF_LOCALIZE = "self_localize"
+LEARN_MANIFOLD = "learnManifold"
+LEARN_JEPA = "learnJEPA"
+VISION_POLICY = "visionPolicy"
+LEARN_MOVEMENT = "learnMovement"
+INTEGRATION_POLICY = "integrationPolicy"
+POLICY_LEARNING = [VISION_POLICY, INTEGRATION_POLICY]
+MANIFOLD_DIM = 2

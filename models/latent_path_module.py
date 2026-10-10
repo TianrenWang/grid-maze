@@ -10,6 +10,7 @@ from torch import nn
 torch.set_printoptions(precision=2)
 
 from .agent_models import PathIntegrationWithVisionModule
+from .constants import *
 from .jepa import JEPA
 from .manifold_projector import ManifoldProjector
 from .utils import calculatePlace
@@ -31,13 +32,6 @@ class ControlOutputs:
     jepaLatent: torch.Tensor | None = None
 
 
-SELF_LOCALIZE = "self_localize"
-LEARN_MANIFOLD = "learnManifold"
-LEARN_JEPA = "learnJEPA"
-VISION_POLICY = "visionPolicy"
-MANIFOLD_DIM = 2
-
-
 class LatentPathModule(PathIntegrationWithVisionModule):
     def setup(self):
         PathIntegrationWithVisionModule.setup(self)
@@ -57,6 +51,8 @@ class LatentPathModule(PathIntegrationWithVisionModule):
             self.trainingPhase = LEARN_MANIFOLD
         elif self.model_config.get(SELF_LOCALIZE, False):
             self.trainingPhase = SELF_LOCALIZE
+        elif self.model_config.get(LEARN_MOVEMENT, False):
+            self.trainingPhase = LEARN_MOVEMENT
         else:
             self.trainingPhase = None
 
@@ -81,7 +77,7 @@ class LatentPathModule(PathIntegrationWithVisionModule):
         vision, _, _, action = self._getObsFromBatch(batch)
         output = ControlOutputs()
 
-        if self.trainingPhase == LEARN_JEPA or self.trainingPhase == LEARN_MANIFOLD:
+        if self.trainingPhase not in POLICY_LEARNING:
             if self.trainingPhase == LEARN_JEPA:
                 jepaMemory, jepaLoss, coordinateReadout = self.jepa.forward_train(
                     vision,
@@ -90,7 +86,10 @@ class LatentPathModule(PathIntegrationWithVisionModule):
                 output.coordinateReadout = coordinateReadout
                 output.jepaMemory = jepaMemory
                 output.jepaLoss = jepaLoss
-            else:
+            elif (
+                self.trainingPhase == LEARN_MOVEMENT
+                or self.trainingPhase == LEARN_MANIFOLD
+            ):
                 jepaLatent = self.jepa.forward(vision)
                 projectedManifold, calculatedManifold = (
                     self.manifoldProjector.forward_train(jepaLatent, action)

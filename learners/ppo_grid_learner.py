@@ -21,7 +21,7 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
         fwd_out: dict[str, torch.Tensor],
     ):
         module = self.module[module_id]
-        lossMask = batch["loss_mask"]
+        lossMask: torch.Tensor = batch["loss_mask"]
         _, _, coordinates, _ = self.module[module_id]._getObsFromBatch(batch)
         coordinates = coordinates[lossMask]
 
@@ -88,26 +88,29 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 window=100,
             )
             return jepaLoss + coordinateLoss
-        elif module.trainingPhase == "learnManifold":
-            jepaLatents = fwd_out["jepaLatent"][lossMask]
-            calculatedCoordinates = fwd_out["calculatedManifold"][lossMask]
-            projectedManifold = fwd_out["projectedManifold"][lossMask]
-            normalizedLatents = torch.nn.functional.normalize(jepaLatents, dim=-1)
-            similarity = normalizedLatents @ normalizedLatents.T
+        elif module.trainingPhase == "learnMovement":
+            matrixLossMask = lossMask.float().unsqueeze(-1)
+            matrixLossMask = (matrixLossMask @ matrixLossMask.transpose(-1, -2)).bool()
+            jepaLatents = torch.nn.functional.normalize(fwd_out["jepaLatent"], dim=-1)
+            similarity = jepaLatents @ jepaLatents.transpose(-1, -2)
+            calculatedCoordinates = fwd_out["calculatedManifold"]
             distances = torch.cdist(calculatedCoordinates, calculatedCoordinates)
             deduplicationMask = torch.triu(
                 torch.ones_like(similarity, dtype=torch.bool), diagonal=1
             )
-            similarity = similarity[deduplicationMask]
-            distances = distances[deduplicationMask]
-            sameObsMask = similarity > 0.999
-            diffObsMask = similarity < 0.999
-            distancesOfSameObs = distances[sameObsMask]
-            distancesOfDiffObs = distances[diffObsMask]
-            negativeSampleLoss = torch.exp(-distancesOfDiffObs * 50)
-            projectionError = torch.abs(
-                projectedManifold - calculatedCoordinates.detach()
+            matrixLossMask = matrixLossMask[deduplicationMask]
+            similarity = similarity[deduplicationMask][matrixLossMask]
+            distances = distances[deduplicationMask][matrixLossMask]
+            samenessThreshold = 0.995
+            sameObsMask = similarity >= samenessThreshold
+            diffObsMask = (similarity < samenessThreshold) & (
+                distances < module.manifoldProjector.speed * 1.415
             )
+            distancesOfSameObs = distances[sameObsMask]
+            distancesOfDiffObs = distances[diffObsMask][:150]
+            negativeSampleLoss = torch.exp(-distancesOfDiffObs * 50)
+
+            directionScore = module.manifoldProjector._getCrossScore()
             self.metrics.log_value(
                 key=(module_id, "sameObsCoherenceLoss"),
                 value=distancesOfSameObs.mean().cpu().detach().numpy(),
@@ -119,28 +122,42 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 window=100,
             )
             self.metrics.log_value(
+                key=(module_id, "directionScore"),
+                value=directionScore.cpu().detach().numpy(),
+                window=100,
+            )
+            return distancesOfSameObs.mean() + negativeSampleLoss.mean()
+        elif module.trainingPhase == "learnManifold":
+            # Projection accuracy
+            calculatedCoordinates = fwd_out["calculatedManifold"][lossMask]
+            projectedManifold = fwd_out["projectedManifold"][lossMask]
+            projectionError = torch.abs(
+                projectedManifold - calculatedCoordinates.detach()
+            )
+            self.metrics.log_value(
                 key=(module_id, "projectionError"),
                 value=projectionError.mean().cpu().detach().numpy(),
                 window=100,
             )
-            self.metrics.log_value(
-                key=(module_id, "directionScore"),
-                value=module.manifoldProjector._getCrossScore().cpu().detach().numpy(),
-                window=100,
-            )
 
-            trueDistances = torch.cdist(coordinates, coordinates)[deduplicationMask]
-            inconsistency = torch.abs(trueDistances - distances).mean()
+            # Global consistency
+            calculatedCoordinates = fwd_out["calculatedManifold"][lossMask]
+            predictedDistances = torch.cdist(
+                calculatedCoordinates, calculatedCoordinates
+            )
+            trueDistances = torch.cdist(coordinates, coordinates)
+            deduplicationMask = torch.triu(
+                torch.ones_like(trueDistances, dtype=torch.bool), diagonal=1
+            )
+            predictedDistances = predictedDistances[deduplicationMask]
+            trueDistances = trueDistances[deduplicationMask]
+            inconsistency = torch.abs(trueDistances - predictedDistances).mean()
             self.metrics.log_value(
                 key=(module_id, "inconsistency"),
                 value=inconsistency.mean().cpu().detach().numpy(),
                 window=100,
             )
-            return (
-                (distancesOfSameObs**2).mean()
-                + negativeSampleLoss.mean()
-                + (projectionError**2).mean()
-            )
+            return projectionError.mean()
         else:
             return super().compute_loss_for_module(
                 module_id=module_id,

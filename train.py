@@ -48,9 +48,11 @@ parser.add_argument("--entropy", type=float, default=0.1)
 parser.add_argument("--visionPolicy", action="store_true")
 parser.add_argument("--learnManifold", action="store_true")
 parser.add_argument("--learnJEPA", action="store_true")
+parser.add_argument("--learnMovement", action="store_true")
+parser.add_argument("--testRun", action="store_true")
 args = parser.parse_args()
 
-if args.pretrain or args.learnManifold or args.learnJEPA:
+if args.pretrain or args.learnManifold or args.learnJEPA or args.learnMovement:
     args.latentPath = True
 
 
@@ -94,9 +96,9 @@ if __name__ == "__main__":
     else:
         module = models.SimpleMazeModule
 
-    if args.selfLocalize or args.learnJEPA:
+    if args.selfLocalize or args.learnJEPA or args.learnManifold:
         env = SmoothExplorationEnv
-    elif args.learnManifold:
+    elif args.learnMovement:
         env = JitteryExplorationEnv
     elif usesGrid() or args.gps or args.fogged:
         env = PlaceMazeEnv
@@ -135,6 +137,7 @@ if __name__ == "__main__":
                     "visionPolicy": args.visionPolicy,
                     "learnManifold": args.learnManifold,
                     "learnJEPA": args.learnJEPA,
+                    "learnMovement": args.learnMovement,
                 },
             ),
         )
@@ -167,7 +170,7 @@ if __name__ == "__main__":
             agent.evaluate()
     else:
         numSamples = 1
-        for i in range(args.numLearn):
+        for i in range(1 if args.testRun else args.numLearn):
             result = agent.train()
             if i == 0 or (i + 1) % args.evalInterval == 0:
                 print(
@@ -175,7 +178,12 @@ if __name__ == "__main__":
                     " - ",
                     str(datetime.now())[:-7],  # noqa: DTZ005
                 )
-                if args.selfLocalize or args.learnManifold or args.learnJEPA:
+                if (
+                    args.selfLocalize
+                    or args.learnManifold
+                    or args.learnJEPA
+                    or args.learnMovement
+                ):
                     trainingOutputs = result["learners"]["default_policy"]
                     if "prediction_error" in trainingOutputs:
                         predictionError = np.round(
@@ -191,7 +199,7 @@ if __name__ == "__main__":
                         coordinateLoss = np.round(trainingOutputs["coordinate_loss"], 2)
                         print("Coordinate Loss:", coordinateLoss)
 
-                    if args.learnManifold:
+                    if args.learnMovement:
                         sameObsCoherenceLoss = np.round(
                             trainingOutputs["sameObsCoherenceLoss"], 4
                         )
@@ -200,14 +208,17 @@ if __name__ == "__main__":
                             trainingOutputs["diffObsCoherenceLoss"], 4
                         )
                         print("Diff Loss:", diffObsCoherenceLoss)
+                        directionScore = np.round(trainingOutputs["directionScore"], 2)
+                        print("Direction Score:", directionScore)
+
+                    if args.learnManifold:
                         projectionError = np.round(
                             trainingOutputs["projectionError"], 4
                         )
                         print("Projection Error:", projectionError)
                         inconsistency = np.round(trainingOutputs["inconsistency"], 4)
                         print("Inconsistency:", inconsistency)
-                        directionScore = np.round(trainingOutputs["directionScore"], 2)
-                        print("Direction Score:", directionScore)
+
                 else:
                     averageReturn = 0
                     averageSteps = 0
@@ -222,4 +233,6 @@ if __name__ == "__main__":
                     numSamples = (
                         int((evalMaxSteps - averageSteps) / evalMaxSteps * 10) + 1
                     )
-                agent.save(checkpointPath)
+
+                if not args.testRun:
+                    agent.save(checkpointPath)

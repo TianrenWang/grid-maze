@@ -10,7 +10,11 @@ class ManifoldProjector(nn.Module):
         super().__init__()
         self.manifoldProjector = nn.Sequential(
             nn.Linear(latentSize, latentSize),
-            nn.ReLU(),
+            nn.Tanh(),
+            nn.Linear(latentSize, latentSize),
+            nn.Tanh(),
+            nn.Linear(latentSize, latentSize),
+            nn.Tanh(),
             nn.Linear(latentSize, manifoldDim),
         )
         self.EMAProjector = EMA(

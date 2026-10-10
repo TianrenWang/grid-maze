@@ -106,14 +106,22 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
             diffObsMask = (similarity < samenessThreshold) & (
                 distances < module.manifoldProjector.speed * 1.415
             )
-            distancesOfSameObs = distances[sameObsMask]
+            distancesOfSameObs = distances[sameObsMask].mean()
             distancesOfDiffObs = distances[diffObsMask][:150]
             negativeSampleLoss = torch.exp(-distancesOfDiffObs * 50)
+
+            pastSameObsLoss = self.metrics.peek((module_id, "sameObsCoherenceLoss"), 1)
+            reachedStableState = self.metrics.peek((module_id, "stable"), 0)
+
+            if pastSameObsLoss <= 1e-3 and not reachedStableState:
+                print("Reached stable movement state")
+                self.metrics.log_value(key=(module_id, "stable"), value=1, window=1)
+                reachedStableState = 1
 
             directionScore = module.manifoldProjector._getCrossScore()
             self.metrics.log_value(
                 key=(module_id, "sameObsCoherenceLoss"),
-                value=distancesOfSameObs.mean().cpu().detach().numpy(),
+                value=distancesOfSameObs.cpu().detach().numpy(),
                 window=100,
             )
             self.metrics.log_value(
@@ -126,7 +134,11 @@ class PPOTorchLearnerWithSelfPredLoss(PPOTorchLearner):
                 value=directionScore.cpu().detach().numpy(),
                 window=100,
             )
-            return distancesOfSameObs.mean() + negativeSampleLoss.mean()
+
+            if reachedStableState:
+                return distancesOfSameObs + negativeSampleLoss.mean()
+            else:
+                return distancesOfSameObs
         elif module.trainingPhase == "learnManifold":
             # Projection accuracy
             calculatedCoordinates = fwd_out["calculatedManifold"][lossMask]
